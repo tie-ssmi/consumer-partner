@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Consumer Web App</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+    <style>
+        * { font-family: 'Kanit', sans-serif !important; }
+        body { background-color: #f3f4f6; }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        
+        /* Animation สินค้าวิ่ง */
+        .animate-infinite-scroll { display: flex; width: max-content; animation: scroll-left 60s linear infinite; }
+        /* .animate-infinite-scroll:hover { animation-play-state: paused; } เอาออกเพื่อให้วิ่งตลอด */
+        @keyframes scroll-left { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+        
+        .modal-scale-in { animation: scaleIn 0.2s ease-out forwards; }
+        @keyframes scaleIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+        
+        .notification-dot {
+            position: absolute; top: 5px; right: 5px;
+            width: 8px; height: 8px;
+            background-color: #fbbf24; border-radius: 50%; border: 1px solid #D32F2F;
+            display: none;
+        }
+        .notification-dot.active { display: block; }
+        
+        .level-card { border: 2px solid transparent; transition: all 0.2s; }
+        .level-card.selected { border-color: #D32F2F; background-color: #fff1f2; }
+    </style>
+</head>
+<body class="flex justify-center min-h-screen text-gray-800">
+
+    <div class="w-full max-w-xl bg-gray-50 shadow-2xl relative flex flex-col min-h-screen">
+        
+        <header class="bg-[#D32F2F] text-white shadow-md sticky top-0 z-50 h-14 flex items-center px-4 justify-between flex-none">
+            <div class="font-bold text-lg tracking-wide">CONSUMER</div>
+            <button onclick="toggleNotifications()" class="relative p-2 hover:bg-white/10 rounded-full transition">
+                <i class="fa-solid fa-bell text-xl"></i>
+                <div id="notif-dot" class="notification-dot"></div>
+            </button>
+        </header>
+
+        <div id="notification-panel" class="absolute top-14 right-2 w-72 bg-white shadow-xl rounded-xl border border-gray-100 z-[60] hidden flex-col max-h-[400px] overflow-y-auto">
+            <div class="p-3 border-b border-gray-100 font-bold text-sm text-gray-700 bg-gray-50 sticky top-0">การแจ้งเตือน</div>
+            <div id="notif-list" class="divide-y divide-gray-50">
+                <div class="p-4 text-center text-xs text-gray-400">ไม่มีการแจ้งเตือนใหม่</div>
+            </div>
+        </div>
+
+        <div class="flex-1 w-full overflow-y-auto overflow-x-hidden pb-20" onclick="closeNotifOnClickOutside(event)">
+            
+            <div id="page-home" class="space-y-4">
+                
+                <div class="bg-white p-4 shadow-sm border-b border-gray-100 pb-6">
+                    <div class="mb-3">
+                        <h2 class="text-gray-800 font-bold text-base">งานประจำวัน</h2>
+                        <p class="text-gray-400 text-[10px]">ภารกิจด่วนมีค่าคอมมิชชั่นสูงขึ้น (บาท)</p>
+                    </div>
+
+                    <div class="w-full overflow-hidden relative py-2 mb-4 bg-gray-50/50 rounded-lg">
+                        <div id="scrolling-products" class="animate-infinite-scroll gap-3 px-2">
+                            <div class="p-4 text-xs text-gray-400 flex items-center gap-2">กำลังโหลดสินค้าจากฐานข้อมูล...</div>
+                        </div>
+                    </div>
+
+                    <button onclick="switchPage('work')" class="w-full bg-[#D32F2F] text-white py-3 rounded-lg font-bold shadow-md hover:bg-[#b71c1c] active:scale-95 transition flex justify-center items-center gap-2 text-sm">
+                        <i class="fa-solid fa-bolt animate-pulse"></i> เริ่มสั่งจอง (ไปหน้างาน)
+                    </button>
+
+                    <div class="mt-4 bg-[#fff3e0] text-orange-800 px-3 py-2 rounded-lg flex items-center gap-2 text-xs border border-orange-100">
+                        <i class="fa-solid fa-volume-high text-orange-600"></i>
+                        <marquee scrollamount="5">ยินดีด้วย! สมาชิก <span id="marquee-username" class="font-bold">...</span> ระดับของคุณได้รับการอัปเกรด! <span id="marquee-level">...</span></marquee>
+                    </div>
+                </div>
+
+                <div class="bg-white p-4 shadow-sm border-t border-gray-100">
+                    <h2 class="text-gray-800 font-bold text-sm">แบรนด์พันธมิตร</h2>
+                    <p class="text-gray-400 text-[10px] mb-3">พันธมิตรที่เป็นมิตรกับแบรนด์</p>
+                    <div class="grid grid-cols-4 gap-6 items-center justify-items-center py-4">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/a/a9/Amazon_logo.svg" alt="Amazon" class="h-6 w-auto object-contain filter grayscale opacity-50 hover:opacity-100 hover:grayscale-0 transition-all duration-300">
+                        <img src="https://upload.wikimedia.org/wikipedia/en/thumb/8/80/Alibaba-Group-Logo.svg/1200px-Alibaba-Group-Logo.svg.png" alt="Alibaba" class="h-6 w-auto object-contain filter grayscale opacity-50 hover:opacity-100 hover:grayscale-0 transition-all duration-300">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/f/fe/Shopee.svg/2560px-Shopee.svg.png" alt="Shopee" class="h-8 w-auto object-contain filter grayscale opacity-50 hover:opacity-100 hover:grayscale-0 transition-all duration-300">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/4e/Lotte_Mart_logo.svg/2560px-Lotte_Mart_logo.svg.png" alt="Lotte Mart" class="h-6 w-auto object-contain filter grayscale opacity-50 hover:opacity-100 hover:grayscale-0 transition-all duration-300">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/2/2f/Google_2015_logo.svg/1200px-Google_2015_logo.svg.png" alt="Google" class="h-6 w-auto object-contain filter grayscale opacity-50 hover:opacity-100 hover:grayscale-0 transition-all duration-300">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/0/0e/Lazada_Logo.svg/2560px-Lazada_Logo.svg.png" alt="Lazada" class="h-8 w-auto object-contain filter grayscale opacity-50 hover:opacity-100 hover:grayscale-0 transition-all duration-300">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a6/Walmart_logo_transparent_png.png/1200px-Walmart_logo_transparent_png.png" alt="Walmart" class="h-6 w-auto object-contain filter grayscale opacity-50 hover:opacity-100 hover:grayscale-0 transition-all duration-300">
+                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/9/9a/Target_logo.svg/2560px-Target_logo.svg.png" alt="Target" class="h-6 w-auto object-contain filter grayscale opacity-50 hover:opacity-100 hover:grayscale-0 transition-all duration-300">
+                    </div>
+                </div>
+            </div>
+
+            <div id="page-work" class="hidden space-y-3 p-3">
+                <div class="bg-gray-900 rounded-xl p-5 text-white relative overflow-hidden shadow-lg border border-gray-800">
+                    <div class="absolute right-[-10px] top-[-10px] opacity-10 text-8xl text-white">
+                        <i class="fa-solid fa-crown"></i>
+                    </div>
+                    <div class="relative z-10">
+                        <div class="flex items-center gap-2 mb-2">
+                            <span class="text-orange-500 font-bold italic text-xl">V</span>
+                            <span id="work-level-display" class="font-bold text-xl tracking-wider">VIP 1</span>
+                        </div>
+                        <div class="text-2xl font-bold mb-1" id="work-username">...</div>
+                        <div class="text-xs text-gray-400">commission <span class="text-orange-500 font-bold">0.90%</span></div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl p-5 shadow-sm border border-gray-100">
+                    <div class="grid grid-cols-2 gap-y-5 gap-x-4 text-center mb-6">
+                        <div>
+                            <div class="text-lg font-bold text-gray-800" id="work-today-commission">0.00</div>
+                            <div class="text-[10px] text-gray-400 mt-1">ค่าคอมฯ วันนี้</div>
+                        </div>
+                        <div>
+                            <div class="text-lg font-bold text-gray-800" id="work-frozen-amount">0.00</div>
+                            <div class="text-[10px] text-gray-400 mt-1">ถูกแช่แข็ง</div>
+                        </div>
+                        <div>
+                            <div class="text-lg font-bold text-gray-800"><span id="work-completed-orders">0</span>/38</div>
+                            <div class="text-[10px] text-gray-400 mt-1">งานที่ทำสำเร็จ</div>
+                        </div>
+                        <div>
+                            <div class="text-lg font-bold text-[#D32F2F]" id="balance-display-work">0.00</div>
+                            <div class="text-[10px] text-gray-400 mt-1">ยอดเงินคงเหลือ</div>
+                        </div>
+                    </div>
+
+                    <button onclick="startMatching()" class="w-full bg-[#D32F2F] text-white py-3 rounded-full font-bold shadow-lg hover:bg-[#b71c1c] active:scale-95 transition text-base relative overflow-hidden">
+                        กดรับออเดอร์
+                    </button>
+                </div>
+                
+                <div class="bg-white rounded-xl p-4 shadow-sm text-[10px] text-gray-500 space-y-3 leading-relaxed">
+                    <div>
+                        <h3 class="font-bold text-xs text-gray-800 mb-1">คำอธิบาย</h3>
+                        <p>1. ระบบจะจับคู่ออเดอร์อัตโนมัติผ่านระบบ Cloud Computing</p>
+                        <p class="text-red-500">2. จำกัดการทำรายการ 38 ออเดอร์ต่อวัน</p>
+                    </div>
+                </div>
+            </div>
+
+            <div id="page-orders" class="hidden space-y-3 p-3">
+                <h2 class="text-lg font-bold text-gray-800 px-1">รายการคำสั่งซื้อ</h2>
+                <div class="bg-white rounded-lg p-1 flex shadow-sm border border-gray-200">
+                    <button onclick="renderOrders('all', this)" class="order-tab flex-1 py-1.5 text-[10px] rounded-md bg-[#D32F2F] text-white shadow font-medium transition">ทั้งหมด</button>
+                    <button onclick="renderOrders('pending', this)" class="order-tab flex-1 py-1.5 text-[10px] rounded-md text-gray-500 hover:bg-gray-50 font-medium transition">รอดำเนินการ</button>
+                    <button onclick="renderOrders('frozen', this)" class="order-tab flex-1 py-1.5 text-[10px] rounded-md text-gray-500 hover:bg-gray-50 font-medium transition">ถูกจัดเก็บ</button>
+                    <button onclick="renderOrders('completed', this)" class="order-tab flex-1 py-1.5 text-[10px] rounded-md text-gray-500 hover:bg-gray-50 font-medium transition">เสร็จแล้ว</button>
+                </div>
+                <div id="orders-container" class="space-y-3 min-h-[300px] pb-20"></div>
+            </div>
+
+            <div id="page-profile" class="hidden space-y-3 p-3">
+                <div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 flex items-center gap-4">
+                    <div class="w-14 h-14 bg-gray-100 rounded-full flex items-center justify-center text-gray-400 text-xl border border-gray-200">
+                        <i class="fa-solid fa-user"></i>
+                    </div>
+                    <div class="flex-1">
+                        <h2 id="profile-name" class="text-lg font-bold text-gray-800">...</h2>
+                        <div class="text-xs text-gray-500 mt-0.5">Code: <span id="profile-code-display" class="font-mono">...</span></div>
+                        <span class="text-[10px] text-orange-500 font-bold bg-orange-50 px-2 py-0.5 rounded mt-1 inline-block" id="profile-level-display">...</span>
+                    </div>
+                    <button class="text-gray-400 hover:text-[#D32F2F] text-xs font-medium border border-gray-200 px-3 py-1 rounded-full" onclick="logout()">Logout</button>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+                    <div class="p-4 border-b border-gray-50 flex justify-between items-end bg-gray-50/50">
+                        <div>
+                            <div class="text-[10px] text-gray-500 mb-1">ยอดเงินคงเหลือ</div>
+                            <div id="balance-display-2" class="text-[#D32F2F] text-xl font-bold">฿ 0.00</div>
+                        </div>
+                        <div class="text-right">
+                            <div class="text-[10px] text-gray-500 mb-1">รอดำเนินการ</div>
+                            <div id="pending-withdraw-display" class="text-orange-500 text-sm font-bold">฿ 0.00</div>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-3 divide-x divide-gray-50 bg-white">
+                        <button onclick="startDeposit()" class="p-3 hover:bg-gray-50 flex flex-col items-center gap-1.5 text-[10px] text-gray-600 transition">
+                            <i class="fa-solid fa-plus text-lg text-blue-500"></i> เติมเงิน
+                        </button>
+                        <button onclick="startWithdrawal()" class="p-3 hover:bg-gray-50 flex flex-col items-center gap-1.5 text-[10px] text-gray-600 transition">
+                            <i class="fa-solid fa-arrow-up-from-bracket text-lg text-green-500"></i> ถอนเงิน
+                        </button>
+                        <button onclick="switchPage('history')" class="p-3 hover:bg-gray-50 flex flex-col items-center gap-1.5 text-[10px] text-gray-600 transition">
+                            <i class="fa-regular fa-clock text-lg text-purple-500"></i> ประวัติ
+                        </button>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-xl shadow-sm border border-gray-100 divide-y divide-gray-50">
+                    <button onclick="showInviteModal()" class="w-full flex items-center justify-between p-4 hover:bg-gray-50 transition">
+                        <div class="flex items-center gap-4">
+                            <div class="w-8 h-8 rounded-full bg-pink-50 flex items-center justify-center text-pink-500">
+                                <i class="fa-solid fa-share-nodes"></i>
+                            </div>
+                            <span class="text-sm font-medium text-gray-700">เชิญเพื่อน</span>
+                        </div>
+                        <i class="fa-solid fa-chevron-right text-gray-300 text-xs"></i>
+                    </button>
+                </div>
+            </div>
+
+            <div id="page-history" class="hidden space-y-3 p-3">
+                <div class="flex items-center gap-3 mb-2">
+                    <button onclick="switchPage('profile')" class="w-8 h-8 bg-white rounded-full shadow-sm text-gray-600 flex items-center justify-center hover:text-[#D32F2F]">
+                        <i class="fa-solid fa-arrow-left"></i>
+                    </button>
+                    <h2 class="text-lg font-bold text-gray-800">ประวัติธุรกรรม</h2>
+                </div>
+                <div id="history-container" class="space-y-2">
+                    <div class="text-center text-xs text-gray-400 py-10">กำลังโหลด...</div>
+                </div>
+            </div>
+
+            <div id="page-service" class="hidden flex flex-col items-center justify-center h-64 text-xs text-gray-400 p-4 text-center">
+                <i class="fa-solid fa-headset text-4xl mb-3 text-gray-300"></i>
+                <div>ติดต่อฝ่ายบริการลูกค้า</div>
+            </div>
+            <div id="page-news" class="hidden flex items-center justify-center h-64 text-xs text-gray-400">หน้าข่าวสาร</div>
+
+        </div>
+
+        <nav class="bg-[#D32F2F] text-white/70 sticky bottom-0 w-full z-50 shadow-[0_-4px_10px_rgba(0,0,0,0.1)] flex-none h-14 rounded-t-xl">
+            <div class="flex justify-around items-center h-full">
+                <button onclick="switchPage('home')" id="nav-home" class="flex flex-col items-center gap-0.5 w-16 text-white"><i class="fa-solid fa-house text-lg"></i><span class="text-[9px]">หน้าหลัก</span></button>
+                <button onclick="switchPage('orders')" id="nav-orders" class="flex flex-col items-center gap-0.5 w-16 hover:text-white transition"><i class="fa-solid fa-list-check text-lg"></i><span class="text-[9px]">คำสั่งซื้อ</span></button>
+                <button onclick="switchPage('work')" id="nav-work" class="flex flex-col items-center gap-0.5 w-16 hover:text-white transition"><i class="fa-solid fa-briefcase text-lg"></i><span class="text-[9px]">งาน</span></button>
+                <button onclick="switchPage('service')" id="nav-service" class="flex flex-col items-center gap-0.5 w-16 hover:text-white transition"><i class="fa-solid fa-headset text-lg"></i><span class="text-[9px]">บริการ</span></button>
+                <button onclick="switchPage('profile')" id="nav-profile" class="flex flex-col items-center gap-0.5 w-16 hover:text-white transition"><i class="fa-solid fa-user text-lg"></i><span class="text-[9px]">ของฉัน</span></button>
+            </div>
+        </nav>
+
+        <div id="modal-deposit-step1" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-[60] backdrop-blur-sm p-4"><div class="bg-white rounded-2xl w-full max-w-xs shadow-2xl modal-scale-in p-5 relative"><button onclick="closeAllModals()" class="absolute top-3 right-3 text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button><h3 class="text-base font-bold text-gray-800 mb-4 text-center"><i class="fa-solid fa-lock text-[#D32F2F]"></i> ยืนยันรหัสผ่านเพื่อเติมเงิน</h3><input type="password" id="deposit-password" placeholder="รหัสผ่านของคุณ" class="w-full border p-2.5 rounded-lg text-sm mb-4 bg-gray-50 focus:outline-none focus:border-[#D32F2F]"><button onclick="verifyDepositPassword()" class="w-full py-2.5 bg-[#D32F2F] text-white rounded-lg text-sm font-bold shadow hover:bg-[#b71c1c]">ถัดไป</button></div></div>
+        
+        <div id="modal-deposit-step2" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-[60] backdrop-blur-sm p-4"><div class="bg-white rounded-2xl w-full max-w-sm shadow-2xl modal-scale-in p-5 relative"><button onclick="closeAllModals()" class="absolute top-3 right-3 text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button><h3 class="text-lg font-bold text-gray-800 mb-2 text-center">เลือกระดับที่ต้องการเติม</h3><p class="text-xs text-gray-500 text-center mb-4">เลือกเพื่ออัปเกรดและรับสิทธิพิเศษ</p><div class="space-y-2 mb-5 max-h-[300px] overflow-y-auto pr-1" id="level-list"></div><button onclick="confirmDepositSelection()" class="w-full py-3 bg-[#D32F2F] text-white rounded-xl text-sm font-bold shadow-lg hover:bg-[#b71c1c]">ยืนยันการสมัคร</button></div></div>
+        
+        <div id="modal-deposit-step3" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-[60] backdrop-blur-sm p-4"><div class="bg-white rounded-2xl w-full max-w-sm shadow-2xl modal-scale-in p-0 overflow-hidden relative"><div class="bg-[#D32F2F] p-4 text-center text-white relative"><button onclick="closeAllModals()" class="absolute top-3 right-3 text-white/70 hover:text-white"><i class="fa-solid fa-xmark"></i></button><h3 class="text-lg font-bold">รายละเอียดคำสั่งซื้อ</h3><p class="text-xs opacity-80">กรุณาแคปหน้าจอนี้เพื่อแจ้งพนักงาน</p></div><div class="p-6 space-y-4"><div class="flex justify-between items-center border-b border-dashed border-gray-200 pb-3"><span class="text-xs text-gray-500">หมายเลขคำสั่งซื้อ</span><span id="inv-order-id" class="text-sm font-mono font-bold text-gray-800">...</span></div><div class="flex justify-between items-center border-b border-dashed border-gray-200 pb-3"><span class="text-xs text-gray-500">ชื่อผู้ใช้ / เบอร์โทร</span><div class="text-right"><div id="inv-username" class="text-sm font-bold text-gray-800">...</div><div id="inv-phone" class="text-[10px] text-gray-400">...</div></div></div><div class="flex justify-between items-center border-b border-dashed border-gray-200 pb-3"><span class="text-xs text-gray-500">ระดับที่ต้องการ</span><span id="inv-level" class="text-sm font-bold text-[#D32F2F]">...</span></div><div class="flex justify-between items-center"><span class="text-xs text-gray-500">จำนวนเงินที่ต้องชำระ</span><span id="inv-amount" class="text-xl font-bold text-gray-800">฿ ...</span></div><div class="bg-orange-50 text-orange-600 text-xs p-3 rounded-lg text-center font-medium">สถานะ: รอการอนุมัติ กรุณาติดต่อพนักงาน</div><button onclick="showContactLine()" class="w-full py-3 bg-green-500 text-white rounded-xl text-sm font-bold shadow hover:bg-green-600 flex items-center justify-center gap-2"><i class="fa-brands fa-line text-lg"></i> ติดต่อพนักงานเพื่อเติมเงิน</button></div></div></div>
+        
+        <div id="modal-contact-line" class="fixed inset-0 bg-black/80 hidden items-center justify-center z-[70] backdrop-blur-sm p-4"><div class="bg-white rounded-2xl w-full max-w-xs shadow-2xl modal-scale-in p-6 text-center relative"><button onclick="document.getElementById('modal-contact-line').classList.add('hidden')" class="absolute top-3 right-3 text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button><h3 class="text-lg font-bold text-green-600 mb-2">LINE Support</h3><p class="text-xs text-gray-500 mb-4">สแกน QR Code เพื่อติดต่อเจ้าหน้าที่</p><div class="bg-gray-100 p-2 rounded-lg inline-block mb-2"><img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=LineID_Here" alt="Line QR" class="w-48 h-48"></div><div class="text-sm font-bold text-gray-700">ID: @yoursupport</div></div></div>
+
+        <div id="modal-withdraw-step1" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-[60] backdrop-blur-sm p-4"><div class="bg-white rounded-2xl w-full max-w-xs shadow-2xl modal-scale-in p-5"><h3 class="text-base font-bold text-gray-800 mb-4 text-center">🔐 ยืนยันตัวตน</h3><input type="password" id="withdraw-password" placeholder="รหัสผ่าน" class="w-full border p-2.5 rounded-lg text-sm mb-4 bg-gray-50 focus:outline-none focus:border-[#D32F2F]"><div class="flex gap-2"><button onclick="closeWithdrawModal()" class="flex-1 py-2 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold">ยกเลิก</button><button onclick="verifyWithdrawPassword()" class="flex-1 py-2 bg-[#D32F2F] text-white rounded-lg text-xs font-bold">ยืนยัน</button></div></div></div>
+        
+        <div id="modal-withdraw-step2" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-[60] backdrop-blur-sm p-4"><div class="bg-white rounded-2xl w-full max-w-xs shadow-2xl modal-scale-in p-5"><h3 class="text-base font-bold text-gray-800 mb-4 text-center">🏦 ข้อมูลบัญชี</h3><div class="space-y-3"><input type="text" id="wd-bank-name" placeholder="ชื่อธนาคาร" class="w-full border p-2.5 rounded-lg text-sm bg-gray-50"><input type="text" id="wd-account-no" placeholder="เลขที่บัญชี" class="w-full border p-2.5 rounded-lg text-sm bg-gray-50"><input type="text" id="wd-real-name" placeholder="ชื่อบัญชี" class="w-full border p-2.5 rounded-lg text-sm bg-gray-50"></div><div class="flex gap-2 mt-5"><button onclick="closeWithdrawModal()" class="flex-1 py-2 bg-gray-100 text-gray-600 rounded-lg text-xs font-bold">ยกเลิก</button><button onclick="submitBankDetails()" class="flex-1 py-2 bg-[#D32F2F] text-white rounded-lg text-xs font-bold shadow">ถัดไป</button></div></div></div>
+        
+        <div id="modal-withdraw-step3" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-[60] backdrop-blur-sm p-4"><div class="bg-white rounded-2xl w-full max-w-xs shadow-2xl modal-scale-in p-6"><h3 class="text-lg font-bold text-gray-800 mb-1 text-center">ระบุยอดถอน</h3><p class="text-[10px] text-center text-gray-500 mb-4">ระบบจะหักยอดเงินทันทีเพื่อรอดำเนินการ</p><div class="bg-gray-50 p-3 rounded-lg border border-gray-200 mb-4 space-y-2"><div class="flex justify-between text-[10px] text-gray-500"><span>ยอดเงินทั้งหมด:</span> <span id="wd-total-bal" class="font-medium text-gray-800">...</span></div><div class="flex justify-between text-[10px] text-red-500"><span>ถูกแช่แข็ง:</span> <span id="wd-frozen-bal" class="font-medium">...</span></div><div class="border-t border-dashed my-1"></div><div class="flex justify-between text-xs font-bold text-green-600"><span>ถอนได้สูงสุด:</span> <span id="wd-available-bal">...</span></div></div><input type="number" id="wd-amount" placeholder="0.00" class="w-full text-2xl font-bold text-center text-[#D32F2F] border-b-2 border-gray-200 outline-none py-2 bg-transparent mb-5 placeholder-gray-300 focus:border-[#D32F2F] transition-colors"><button onclick="submitWithdrawal()" class="w-full py-2.5 bg-[#D32F2F] text-white rounded-lg text-sm font-bold shadow-lg">ยืนยันการถอนเงิน</button><button onclick="closeWithdrawModal()" class="w-full py-2 text-gray-400 text-[10px] mt-1 hover:text-gray-600">ยกเลิก</button></div></div>
+
+        <div id="custom-modal" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-[70] backdrop-blur-sm p-4"><div class="bg-white rounded-2xl p-5 w-full max-w-xs shadow-2xl modal-scale-in text-center"><h3 id="modal-title" class="text-base font-bold text-gray-800 mb-2">หัวข้อ</h3><p id="modal-message" class="text-xs text-gray-600 mb-5 leading-relaxed">...</p><div id="modal-actions" class="flex justify-center gap-3"></div></div></div>
+        
+        <div id="invite-modal" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-[60] backdrop-blur-sm p-4"><div class="bg-white rounded-2xl w-full max-w-xs shadow-2xl modal-scale-in relative overflow-hidden p-5 text-center"><button onclick="closeInviteModal()" class="absolute top-2 right-2 text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button><div class="w-10 h-10 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-3 text-orange-500"><i class="fa-solid fa-gift"></i></div><h3 class="text-base font-bold text-gray-800 mb-1">เชิญเพื่อน</h3><p class="text-[10px] text-gray-500 mb-3">ส่งรหัสนี้ให้เพื่อนของคุณ</p><div class="bg-gray-50 border border-gray-200 rounded-lg p-2 mb-3"><span id="modal-invite-code" class="font-mono text-xl font-bold text-[#D32F2F] tracking-widest">...</span></div><button onclick="copyInviteLink()" class="w-full bg-[#D32F2F] text-white py-2.5 rounded-lg font-bold text-xs shadow">คัดลอกรหัส</button></div></div>
+
+    </div>
+
+    <script src="admin/firebase_setup.js"></script>
+
+    <script>
+        const storedUser = localStorage.getItem('currentUser');
+        if (!storedUser) window.location.href = 'login.html';
+        
+        let userData = JSON.parse(storedUser);
+        let currentBalance = parseFloat(userData.balance || 0);
+        let pendingWithdraw = 0;
+        let realDocId = null;
+        let myOrders = [];
+        let availableProducts = [];
+        const DAILY_LIMIT = 38;
+        
+        let withdrawData = { bankName: '', accountNo: '', realName: '', availableBalance: 0, frozenAmount: 0 };
+        let selectedLevel = null;
+
+        const VIP_LEVELS = [
+            { name: "VIP 1", price: 100, desc: "เริ่มต้นสร้างรายได้" },
+            { name: "VIP 2", price: 500, desc: "เพิ่มค่าคอมมิชชั่น" },
+            { name: "VIP 3", price: 1000, desc: "สิทธิพิเศษระดับกลาง" },
+            { name: "VIP 4", price: 3000, desc: "รายได้สูง รวดเร็ว" },
+            { name: "VIP 5", price: 5000, desc: "ระดับสูงสุด สิทธิพิเศษเพียบ" }
+        ];
+
+        function setTxt(id, txt) { const el = document.getElementById(id); if (el) el.innerText = txt; }
+
+        // --- DEPOSIT SYSTEM ---
+        function startDeposit() { document.getElementById('deposit-password').value = ''; document.getElementById('modal-deposit-step1').classList.remove('hidden'); document.getElementById('modal-deposit-step1').classList.add('flex'); }
+        function closeAllModals() { document.querySelectorAll('[id^="modal-"]').forEach(el => { el.classList.add('hidden'); el.classList.remove('flex'); }); }
+        function verifyDepositPassword() { const inputPass = document.getElementById('deposit-password').value; const userPass = userData.password || "123456"; if (inputPass === userPass) { document.getElementById('modal-deposit-step1').classList.add('hidden'); document.getElementById('modal-deposit-step1').classList.remove('flex'); showLevelSelection(); } else { alert("รหัสผ่านไม่ถูกต้อง"); } }
+        function showLevelSelection() { const container = document.getElementById('level-list'); container.innerHTML = ''; VIP_LEVELS.forEach((level, index) => { const div = document.createElement('div'); div.className = 'level-card flex justify-between items-center p-3 rounded-lg border border-gray-200 cursor-pointer hover:bg-gray-50'; div.onclick = () => selectLevel(index, div); div.innerHTML = `<div><div class="font-bold text-sm text-gray-800">${level.name}</div><div class="text-[10px] text-gray-500">${level.desc}</div></div><div class="font-bold text-[#D32F2F]">฿${level.price.toLocaleString()}</div>`; container.appendChild(div); }); document.getElementById('modal-deposit-step2').classList.remove('hidden'); document.getElementById('modal-deposit-step2').classList.add('flex'); selectedLevel = null; }
+        function selectLevel(index, element) { document.querySelectorAll('.level-card').forEach(el => el.classList.remove('selected')); element.classList.add('selected'); selectedLevel = VIP_LEVELS[index]; }
+        async function confirmDepositSelection() { if (!selectedLevel) { alert("กรุณาเลือกระดับสมาชิก"); return; } if(confirm(`ยืนยันการสมัคร ${selectedLevel.name} ราคา ฿${selectedLevel.price}?`)) { try { const orderId = "SY" + Date.now() + Math.floor(Math.random() * 100); await window.db.collection("recharges").add({ order_id: orderId, user_id: userData.id || realDocId, username: userData.username, phone: userData.phone || "-", level: selectedLevel.name, amount: selectedLevel.price, status: "pending", type: "สมัครสมาชิก/เติมเงิน", timestamp: new Date().toISOString() }); setTxt('inv-order-id', orderId); setTxt('inv-username', userData.username); setTxt('inv-phone', userData.phone || 'ไม่ระบุเบอร์'); setTxt('inv-level', selectedLevel.name); setTxt('inv-amount', '฿ ' + selectedLevel.price.toLocaleString()); document.getElementById('modal-deposit-step2').classList.add('hidden'); document.getElementById('modal-deposit-step2').classList.remove('flex'); document.getElementById('modal-deposit-step3').classList.remove('hidden'); document.getElementById('modal-deposit-step3').classList.add('flex'); } catch(e) { alert("เกิดข้อผิดพลาด: " + e.message); } } }
+        function showContactLine() { document.getElementById('modal-contact-line').classList.remove('hidden'); document.getElementById('modal-contact-line').classList.add('flex'); }
+
+        // --- REAL-TIME & SETUP ---
+        function setupRealtimeUser() { if (!window.db) return setTimeout(setupRealtimeUser, 1000); let query = (typeof userData.id === 'number' || (typeof userData.id === 'string' && userData.id.length < 10)) ? window.db.collection("users").where("id", "==", userData.id).limit(1) : window.db.collection("users").doc(userData.id); if (query.get) { query.get().then(snap => { if(!snap.empty) { realDocId = snap.docs[0].id; listenToUserDoc(realDocId); } }); } else { realDocId = userData.id; listenToUserDoc(realDocId); } }
+        function listenToUserDoc(docId) { window.db.collection("users").doc(docId).onSnapshot(doc => { if (doc.exists) { userData = { ...doc.data(), id: doc.data().id }; localStorage.setItem('currentUser', JSON.stringify(userData)); currentBalance = parseFloat(userData.balance); updateUI(); } }); }
+        function setupRealtimeWithdrawals() { if(!window.db) return; window.db.collection("withdrawals").where("username", "==", userData.username).onSnapshot(snap => { let sumPending = 0; snap.forEach(doc => { const d = doc.data(); if(d.status === 'pending') sumPending += parseFloat(d.amount || 0); }); pendingWithdraw = sumPending; updateUI(); }); }
+        function setupRealtimeNotifications() { if(!window.db) return; window.db.collection("notifications").where("user_id", "==", (userData.id || realDocId)).where("read", "==", false).onSnapshot(snap => { const dot = document.getElementById('notif-dot'); if(!snap.empty) dot.classList.add('active'); else dot.classList.remove('active'); renderNotifications(snap); }); }
+        function renderNotifications(snap) { const list = document.getElementById('notif-list'); if(snap.empty) { list.innerHTML = '<div class="p-4 text-center text-xs text-gray-400">ไม่มีการแจ้งเตือนใหม่</div>'; return; } list.innerHTML = ''; snap.forEach(doc => { const n = doc.data(); const item = `<div class="p-3 hover:bg-gray-50 flex justify-between items-start cursor-pointer transition" onclick="markRead('${doc.id}')"><div><div class="text-xs font-bold text-gray-800 mb-0.5">${n.title}</div><div class="text-[10px] text-gray-500 leading-tight">${n.message}</div></div><div class="w-2 h-2 bg-blue-500 rounded-full mt-1 flex-shrink-0"></div></div>`; list.insertAdjacentHTML('beforeend', item); }); }
+        function toggleNotifications() { const panel = document.getElementById('notification-panel'); panel.classList.toggle('hidden'); panel.classList.toggle('flex'); }
+        function closeNotifOnClickOutside(e) { const panel = document.getElementById('notification-panel'); if (!panel.classList.contains('hidden') && !e.target.closest('header')) { panel.classList.add('hidden'); panel.classList.remove('flex'); } }
+        async function markRead(docId) { await window.db.collection("notifications").doc(docId).update({ read: true }); }
+
+        // --- WITHDRAW ---
+        function startWithdrawal() { document.getElementById('withdraw-password').value = ''; document.getElementById('modal-withdraw-step1').classList.remove('hidden'); document.getElementById('modal-withdraw-step1').classList.add('flex'); }
+        function closeWithdrawModal() { ['modal-withdraw-step1', 'modal-withdraw-step2', 'modal-withdraw-step3'].forEach(id => { const el = document.getElementById(id); if (el) { el.classList.add('hidden'); el.classList.remove('flex'); } }); }
+        function verifyWithdrawPassword() { const inputPass = document.getElementById('withdraw-password').value; const userPass = userData.password || "123456"; if (inputPass === userPass) { document.getElementById('modal-withdraw-step1').classList.add('hidden'); document.getElementById('modal-withdraw-step1').classList.remove('flex'); document.getElementById('modal-withdraw-step2').classList.remove('hidden'); document.getElementById('modal-withdraw-step2').classList.add('flex'); } else { alert("รหัสผ่านไม่ถูกต้อง"); } }
+        function submitBankDetails() { const bank = document.getElementById('wd-bank-name').value; const accNo = document.getElementById('wd-account-no').value; const name = document.getElementById('wd-real-name').value; if (!bank || !accNo || !name) { alert("กรุณากรอกข้อมูลให้ครบถ้วน"); return; } withdrawData.bankName = bank; withdrawData.accountNo = accNo; withdrawData.realName = name; const total = currentBalance; const frozen = withdrawData.frozenAmount || 0; const available = total - frozen; withdrawData.availableBalance = available > 0 ? available : 0; setTxt('wd-total-bal', '฿' + total.toLocaleString()); setTxt('wd-frozen-bal', '฿' + frozen.toLocaleString()); setTxt('wd-available-bal', '฿' + withdrawData.availableBalance.toLocaleString()); document.getElementById('wd-amount').value = ''; document.getElementById('modal-withdraw-step2').classList.add('hidden'); document.getElementById('modal-withdraw-step2').classList.remove('flex'); document.getElementById('modal-withdraw-step3').classList.remove('hidden'); document.getElementById('modal-withdraw-step3').classList.add('flex'); }
+        async function submitWithdrawal() { const amount = parseFloat(document.getElementById('wd-amount').value); if (isNaN(amount) || amount <= 0) { alert("ยอดเงินไม่ถูกต้อง"); return; } if (amount > withdrawData.availableBalance) { alert("ยอดเงินเกินกว่าที่ถอนได้"); return; } if(confirm(`ยืนยันการถอนเงินจำนวน ฿${amount.toLocaleString()}?`)) { try { await window.db.collection("withdrawals").add({ user_id: userData.id || realDocId, username: userData.username, amount: amount, bank_name: withdrawData.bankName, account_number: withdrawData.accountNo, account_name: withdrawData.realName, status: 'pending', timestamp: new Date().toISOString() }); const newBalance = currentBalance - amount; if(realDocId) await window.db.collection("users").doc(realDocId).update({ balance: newBalance }); currentBalance = newBalance; updateUI(); closeWithdrawModal(); showCustomModal('ส่งคำขอสำเร็จ', 'ระบบได้รับคำขอถอนเงินแล้ว กรุณารอการตรวจสอบจากเจ้าหน้าที่', 'alert'); } catch (e) { alert("เกิดข้อผิดพลาด: " + e.message); } } }
+
+        function fetchHistory() { if(!window.db) return; const container = document.getElementById('history-container'); container.innerHTML = '<div class="text-center text-xs text-gray-400 py-10">กำลังโหลด...</div>'; window.db.collection("withdrawals").where("username", "==", userData.username).get().then(snap => { let items = []; snap.forEach(doc => items.push({ ...doc.data(), id: doc.id })); items.sort((a,b) => new Date(b.timestamp) - new Date(a.timestamp)); if (items.length === 0) { container.innerHTML = '<div class="text-center text-xs text-gray-400 py-10">ไม่มีประวัติธุรกรรม</div>'; return; } container.innerHTML = ''; items.forEach(item => { let statusText = 'รอตรวจสอบ', statusClass = 'st-pending'; if(item.status === 'approved') { statusText = 'สำเร็จ'; statusClass = 'st-approved'; } if(item.status === 'rejected') { statusText = 'ล้มเหลว'; statusClass = 'st-rejected'; } const date = new Date(item.timestamp).toLocaleString('th-TH', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute:'2-digit'}); container.insertAdjacentHTML('beforeend', `<div class="bg-white p-3 rounded-xl border border-gray-100 shadow-sm flex justify-between items-center"><div><div class="text-sm font-bold text-gray-700 flex items-center gap-2"><i class="fa-solid fa-money-bill-transfer text-gray-400"></i> ถอนเงิน</div><div class="text-[10px] text-gray-400 mt-0.5">${date}</div></div><div class="text-right"><div class="font-bold text-gray-800">-฿${Number(item.amount).toLocaleString()}</div><div class="text-[10px] font-bold ${statusClass}">${statusText}</div></div></div>`); }); }); }
+        function fetchWorkStats() { if (!window.db) return; const today = new Date(); const day = today.getDate(); const monthNames = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"]; const monthStr = monthNames[today.getMonth()]; window.db.collection("orders").where("username", "==", userData.username).onSnapshot(snap => { let todayCommission = 0, todayCount = 0, frozenAmount = 0; snap.forEach(doc => { const o = doc.data(); if (o.status === 'frozen' || (o.frozen_amount && parseFloat(o.frozen_amount) > 0)) { frozenAmount += parseFloat(o.frozen_amount || o.amount || 0); } if (o.status === 'completed' && o.pay_time) { if (o.pay_time.includes(day) && o.pay_time.includes(monthStr)) { todayCount++; todayCommission += parseFloat(o.commission || 0); } } }); withdrawData.frozenAmount = frozenAmount; setTxt('work-today-commission', todayCommission.toFixed(2)); setTxt('work-frozen-amount', frozenAmount.toFixed(2)); setTxt('work-completed-orders', todayCount); userData.todayCount = todayCount; }); }
+        
+        // --- UPDATED PRODUCT FETCHING ---
+        function fetchScrollingProducts() {
+            if (!window.db) return setTimeout(fetchScrollingProducts, 1000);
+            const container = document.getElementById('scrolling-products');
+            
+            // 1. ดึงข้อมูลทั้งหมด (เอา limit ออก)
+            window.db.collection("products").get().then((snap) => {
+                availableProducts = []; 
+                let html = '';
+                
+                snap.forEach(doc => {
+                    const p = doc.data();
+                    // เก็บสินค้าทั้งหมดลงอาเรย์ เพื่อไว้ใช้ตอนสุ่มจับคู่ (startMatching)
+                    availableProducts.push(p);
+                    
+                    const firstChar = (p.name || 'P').charAt(0);
+                    // ใช้ภาพ Placeholder (หรือเปลี่ยนเป็น p.image ถ้ามีลิงก์รูปจริงในฐานข้อมูล)
+                    const imgUrl = `https://placehold.co/100x100/f3f4f6/9ca3af?text=${firstChar}`;
+                    
+                    // สร้าง HTML สำหรับโชว์สินค้า (เอา onclick ออก)
+                    html += `
+                        <div class="min-w-[90px] bg-white rounded-lg border border-gray-100 shadow-sm p-1.5 flex flex-col items-center">
+                            <div class="w-16 h-16 mb-1 rounded bg-gray-50 flex items-center justify-center overflow-hidden">
+                                <img src="${imgUrl}" alt="${p.name}" class="w-full h-full object-cover rounded opacity-80">
+                            </div>
+                            <div class="text-[9px] text-gray-600 line-clamp-1 w-full text-center mt-1">${p.name}</div>
+                            <div class="text-[#D32F2F] text-[10px] font-bold mt-0.5">฿${parseFloat(p.price).toLocaleString()}</div>
+                        </div>`;
+                });
+                
+                // เพิ่ม HTML ซ้ำ เพื่อให้การเลื่อนดูต่อเนื่อง (Infinite Scroll) ถ้าสินค้าน้อย
+                if (snap.size > 0 && snap.size < 10) {
+                     html += html + html + html; 
+                }
+                
+                container.innerHTML = html || '<div class="p-4 text-xs text-gray-400 w-full text-center">กำลังโหลดข้อมูล...</div>';
+            });
+        }
+
+        // --- UPDATED MATCHING LOGIC (Smart Filter) ---
+        async function startMatching(forcePrice = null, forceName = null) {
+            if (userData.todayCount >= DAILY_LIMIT) { showCustomModal('ครบกำหนดแล้ว', 'คุณทำภารกิจครบ 38 ออเดอร์สำหรับวันนี้แล้ว', 'alert'); return; }
+            
+            // เช็คว่ามีออเดอร์ค้างไหม
+            const pendingQuery = await window.db.collection("orders").where("username", "==", userData.username).where("status", "==", "pending").get();
+            const frozenQuery = await window.db.collection("orders").where("username", "==", userData.username).where("status", "==", "frozen").get();
+            if (!pendingQuery.empty || !frozenQuery.empty) { showCustomModal('มีรายการค้าง', 'กรุณาจัดการออเดอร์เก่าให้เรียบร้อยก่อน', 'alert'); switchPage('orders'); renderOrders('pending'); return; }
+            
+            let product, price;
+            if (forcePrice) {
+                price = forcePrice;
+                product = { name: forceName };
+            } else {
+                // *** กรองสินค้า: เลือกเฉพาะอันที่ราคา <= เงินในกระเป๋า ***
+                const affordableProducts = availableProducts.filter(p => parseFloat(p.price) <= currentBalance);
+
+                if (affordableProducts.length === 0) { 
+                    showCustomModal('ยอดเงินไม่เพียงพอ', 'ยอดเงินไม่เพียงพอสำหรับสินค้าขั้นต่ำ กรุณาเติมเงิน', 'confirm', () => switchPage('service')); 
+                    return; 
+                }
+                
+                // สุ่มจากรายการที่ซื้อไหว
+                product = affordableProducts[Math.floor(Math.random() * affordableProducts.length)];
+                price = Number(product.price);
+            }
+
+            if(confirm(`ยืนยันการรับออเดอร์ "${product.name || 'สินค้า'}" ราคา ฿${price.toLocaleString()} ?`)) {
+                try {
+                    const today = new Date();
+                    const options = { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' };
+                    const timeStr = today.toLocaleDateString('th-TH', options);
+                    
+                    await window.db.collection("orders").add({
+                        username: userData.username,
+                        amount: price,
+                        commission: price * 0.009, 
+                        order_time: timeStr,
+                        status: 'pending',
+                        payment_status: 'unpaid',
+                        product_name: product.name || 'สินค้า',
+                        order_id: 'UB' + Date.now(),
+                        level: userData.level || 'VIP 1',
+                        user_balance: currentBalance,
+                        frozen_amount: 0
+                    });
+                    
+                    switchPage('orders'); renderOrders('pending'); showCustomModal('จับคู่สำเร็จ!', 'กรุณากดยืนยันชำระเงิน', 'alert');
+                } catch (e) { alert("Error: " + e.message); }
+            }
+        }
+
+        function renderOrders(filterStatus = 'all', btnElement = null) { if(btnElement) { document.querySelectorAll('.order-tab').forEach(b => { b.classList.remove('bg-[#D32F2F]', 'text-white', 'shadow'); b.classList.add('text-gray-500', 'hover:bg-gray-50'); }); btnElement.classList.remove('text-gray-500', 'hover:bg-gray-50'); btnElement.classList.add('bg-[#D32F2F]', 'text-white', 'shadow'); } const container = document.getElementById('orders-container'); if (!window.db) return; window.db.collection("orders").where("username", "==", userData.username).onSnapshot(snap => { const orders = []; snap.forEach(d => orders.push({ docId: d.id, ...d.data() })); orders.sort((a, b) => b.order_id.localeCompare(a.order_id)); container.innerHTML = ''; let hasData = false; orders.forEach(order => { if (filterStatus !== 'all' && order.status !== filterStatus) return; hasData = true; let statusHtml = '', btnHtml = ''; if (order.status === 'pending') { statusHtml = '<span class="text-orange-500 bg-orange-50 px-2 py-0.5 rounded text-[10px] font-bold">รอชำระ</span>'; btnHtml = `<button onclick="confirmSubmission('${order.docId}', ${order.amount})" class="w-full mt-3 bg-[#D32F2F] text-white py-2 rounded-lg text-xs font-bold shadow hover:bg-[#b71c1c] transition">ส่งคำสั่งซื้อ</button>`; } else if (order.status === 'frozen') { statusHtml = '<span class="text-red-500 bg-red-50 px-2 py-0.5 rounded text-[10px] font-bold">ถูกแช่แข็ง</span>'; btnHtml = `<div class="mt-2 text-xs text-red-500 bg-red-50 p-2 text-center rounded">ติดต่อแอดมินเพื่อปลดล็อค</div>`; } else { statusHtml = '<span class="text-green-600 bg-green-50 px-2 py-0.5 rounded text-[10px] font-bold">เสร็จสิ้น</span>'; } container.insertAdjacentHTML('beforeend', `<div class="bg-white rounded-xl p-4 shadow-sm border border-gray-100 mb-3"><div class="flex justify-between items-center mb-3 border-b border-dashed pb-2"><span class="text-[10px] text-gray-400">ID: ${order.order_id}</span>${statusHtml}</div><div class="flex gap-3"><div class="w-12 h-12 bg-gray-100 rounded-lg flex items-center justify-center text-gray-300 font-bold text-xl bg-slate-50 border border-gray-200">${(order.product_name||'P').charAt(0)}</div><div class="flex-1"><h3 class="text-xs font-bold text-gray-800 line-clamp-1">${order.product_name || 'สินค้า'}</h3><div class="flex justify-between text-[10px] mt-1 text-gray-500"><span>ราคา:</span> <span class="font-bold text-gray-800">฿${Number(order.amount).toLocaleString()}</span></div><div class="flex justify-between text-[10px] mt-0.5 text-orange-500 font-bold"><span>คอมมิชชั่น:</span> <span>+฿${Number(order.commission).toLocaleString()}</span></div></div></div>${btnHtml}</div>`); }); if (!hasData) container.innerHTML = '<div class="text-center text-xs text-gray-400 py-10">ไม่มีรายการ</div>'; }); }
+        async function confirmSubmission(docId, amount) { if (currentBalance < amount) { showCustomModal('ยอดเงินไม่พอ', 'กรุณาเติมเงิน', 'alert'); return; } if(confirm("ยืนยันการชำระเงิน?")) { try { const newBalance = currentBalance - amount; if(realDocId) await window.db.collection("users").doc(realDocId).update({ balance: newBalance }); const options = { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit', second: '2-digit' }; const timeStr = new Date().toLocaleDateString('th-TH', options); await window.db.collection("orders").doc(docId).update({ status: 'completed', payment_status: 'paid', pay_time: timeStr }); switchPage('work'); showCustomModal('สำเร็จ', 'ทำรายการเรียบร้อยแล้ว', 'alert'); } catch(e) { alert(e.message); } } }
+        function updateUI() { const fmt = (n) => '฿ ' + Number(n).toLocaleString('en-US', { minimumFractionDigits: 2 }); setTxt('balance-display-1', fmt(currentBalance)); setTxt('balance-display-2', fmt(currentBalance)); setTxt('balance-display-work', fmt(currentBalance)); setTxt('pending-withdraw-display', fmt(pendingWithdraw)); setTxt('work-username', userData.username); setTxt('work-level-display', userData.level || 'VIP 1'); setTxt('profile-name', userData.username); setTxt('profile-code-display', userData.invite_code || '-'); setTxt('profile-level-display', userData.level || 'ทั่วไป'); setTxt('marquee-username', userData.username); setTxt('marquee-level', userData.level || ''); }
+        function switchPage(pageId) { ['home', 'orders', 'work', 'service', 'profile', 'news', 'membership', 'history'].forEach(p => { const el = document.getElementById('page-'+p); if(el) el.classList.add('hidden'); }); document.getElementById('page-'+pageId).classList.remove('hidden'); ['nav-home', 'nav-orders', 'nav-work', 'nav-service', 'nav-profile'].forEach(id => { const el = document.getElementById(id); if(el) el.classList.replace('text-white', 'text-white/70'); }); const activeMap = { 'home': 'nav-home', 'orders': 'nav-orders', 'work': 'nav-work', 'service': 'nav-service', 'profile': 'nav-profile', 'history': 'nav-profile' }; const activeId = activeMap[pageId]; if(activeId) document.getElementById(activeId).classList.replace('text-white/70', 'text-white'); window.scrollTo(0,0); if(pageId === 'orders') renderOrders('all'); if(pageId === 'work') fetchWorkStats(); if(pageId === 'history') fetchHistory(); }
+        function showCustomModal(title, msg, type, callback = null) { setTxt('modal-title', title); setTxt('modal-message', msg); const actions = document.getElementById('modal-actions'); actions.innerHTML = ''; const btnOk = document.createElement('button'); btnOk.className = 'px-4 py-1.5 bg-[#D32F2F] text-white rounded-lg text-xs font-medium'; btnOk.innerText = type === 'confirm' ? 'ยืนยัน' : 'ตกลง'; btnOk.onclick = () => { if(callback) callback(); modal.classList.add('hidden'); }; if(type === 'confirm') { const btnCancel = document.createElement('button'); btnCancel.className = 'px-4 py-1.5 text-gray-500 text-xs mr-2'; btnCancel.innerText = 'ยกเลิก'; btnCancel.onclick = () => modal.classList.add('hidden'); actions.append(btnCancel); } actions.append(btnOk); document.getElementById('custom-modal').classList.remove('hidden'); document.getElementById('custom-modal').classList.add('flex'); }
+        const modal = document.getElementById('custom-modal');
+        function closeInviteModal() { document.getElementById('invite-modal').classList.remove('hidden', 'flex'); document.getElementById('invite-modal').classList.add('hidden'); }
+        function showInviteModal() { setTxt('modal-invite-code', userData.invite_code || '-'); document.getElementById('invite-modal').classList.remove('hidden'); document.getElementById('invite-modal').classList.add('flex'); }
+        function copyInviteLink() { closeInviteModal(); showCustomModal('สำเร็จ', 'คัดลอกแล้ว', 'alert'); }
+        function logout() { if(confirm("ออกจากระบบ?")) { localStorage.removeItem('currentUser'); location.href = 'login.html'; } }
+
+        updateUI();
+        setTimeout(() => { setupRealtimeUser(); setupRealtimeWithdrawals(); setupRealtimeNotifications(); fetchScrollingProducts(); }, 1000);
+    </script>
+</body>
+</html>
