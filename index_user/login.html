@@ -124,7 +124,7 @@
 
     <script>
         if (localStorage.getItem('currentUser')) {
-            window.location.href = 'index.html';
+            window.location.href = '../index.html';
         }
 
         // ✅ ฟังก์ชันแสดง Modal แทน alert
@@ -202,7 +202,7 @@
                     
                     // ✅ ใช้ Modal แจ้งเตือนความสำเร็จ แล้วค่อยเปลี่ยนหน้า
                     showModal("สำเร็จ", `ยินดีต้อนรับ ${userData.username}`, true, () => {
-                        window.location.href = 'index.html';
+                        window.location.href = '../index.html';
                     });
 
                 } else {
@@ -217,3 +217,4 @@
     </script>
 </body>
 </html>
+
