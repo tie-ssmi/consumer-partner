@@ -1,15 +1,11 @@
-// app.js - Version: Fixed Path for Root & Subfolder
+// app.js - Version: Fixed Syntax Error & Big Net Amount
 
-// --- 0. Path Helper (ฟังก์ชันช่วยตรวจสอบว่าอยู่โฟลเดอร์ไหน) ---
+// --- 0. Path Helper ---
 function getPathConfig() {
     const path = window.location.pathname;
-    // ตรวจสอบว่าเราอยู่ในโฟลเดอร์ index_user หรือไม่
     const isInSubfolder = path.includes("index_user");
-    
     return {
-        // ถ้าอยู่ในโฟลเดอร์ ลิ้งก์ Home ต้องถอยกลับ (../) ถ้าอยู่ข้างนอก ก็แค่ index.html
         homeLink: isInSubfolder ? "../index.html" : "index.html",
-        // ถ้าอยู่ในโฟลเดอร์ ไม่ต้องเติม prefix ถ้าอยู่ข้างนอก ต้องเติม index_user/
         prefix: isInSubfolder ? "" : "index_user/",
         isInSubfolder: isInSubfolder
     };
@@ -20,27 +16,18 @@ function getPathConfig() {
     const pathConfig = getPathConfig();
     const page = window.location.pathname.split("/").pop();
     const publicPages = ['login.html', 'register.html'];
-    
-    // หน้า Public ที่อนุญาตให้เข้าได้โดยไม่ต้อง Login
-    // ถ้าอยู่หน้า Root (index.html) page อาจจะเป็นค่าว่างหรือ index.html
     const isHomePage = page === 'index.html' || page === ''; 
 
     const user = localStorage.getItem('currentUser');
     
     if (!user) {
-        // ถ้าไม่มี User และไม่ใช่หน้า Public -> ดีดไปหน้า Login
-        // เช็คว่าหน้าปัจจุบันคือหน้า Public หรือไม่ (ต้องเช็คชื่อไฟล์เพียวๆ)
         if (!publicPages.includes(page) && !isHomePage) {
-            // กรณีเปิดไฟล์ html ตรงๆ บางที page อาจไม่ตรง logic นี้ แต่กันเหนียวไว้
              window.location.href = pathConfig.prefix + 'login.html';
         }
-        // *เพิ่มเติม: ถ้าอยู่หน้า Home แต่ยังไม่ Login จะให้ดีดไป Login ไหม?
-        // ปกติ App แนวนี้ถ้าเข้าหน้า Home แล้วไม่มี User มักจะดีดไป Login ทันที
         if (isHomePage) {
              window.location.href = pathConfig.prefix + 'login.html';
         }
     } else {
-        // ถ้ามี User แล้ว แต่พยายามเข้าหน้า Login -> ดีดกลับ Home
         if (publicPages.includes(page)) {
             window.location.href = pathConfig.homeLink;
         }
@@ -52,14 +39,10 @@ var userData = localStorage.getItem('currentUser') ? JSON.parse(localStorage.get
 var currentBalance = userData ? parseFloat(userData.balance || 0) : 0;
 var realDocId = userData ? (userData.docId || userData.id) : null;
 var currentLevelConfig = null;
-
-// ✅ ใช้ var เพื่อให้ index_order.html มองเห็นและส่งข้อมูลกลับมาได้
 var currentMatchedOrder = null;
-
 var withdrawInfo = { bankName: '', accName: '', accNo: '', frozen: 0, feeRate: 5, available: 0, pendingWithdraw: 0 };
 var totalFrozenAmount = localStorage.getItem('frozenAmount') ? parseFloat(localStorage.getItem('frozenAmount')) : 0;
 var notifStore = { general: [], withdraw: [], recharge: [] };
-
 var unsubscribeUser = null;
 var unsubscribeFrozen = null;
 var lastRandomIndex = -1; 
@@ -84,7 +67,6 @@ window.setStars = (n) => {
             s.classList.add('text-gray-300');
         }
     });
-    // บันทึกค่าดาวลง attribute
     const container = document.getElementById('star-container');
     if (container) container.setAttribute('data-rating', n);
 }
@@ -137,8 +119,6 @@ function startSystem() {
     fetchLevelConfig();
     setupPendingWithdrawalMonitor();
     setupFrozenMonitor();
-    
-    // ✅ เรียก Heartbeat ตรงนี้ที่เดียวพอ (ปลอดภัยจาก Loop)
     startHeartbeat();
 }
 
@@ -147,7 +127,6 @@ function startHeartbeat() {
     if (heartbeatInterval) return;
     
     updateStatus();
-    // อัปเดตทุก 2 นาทีเพื่อประหยัดโควต้า
     heartbeatInterval = setInterval(updateStatus, 120000); 
     
     function updateStatus() {
@@ -158,12 +137,11 @@ function startHeartbeat() {
     }
 }
 
-// --- 5. Navbar (Fixed for Root/Subfolder) ---
+// --- 5. Navbar ---
 function injectBottomNav() {
     const navContainer = document.getElementById('bottom-nav');
     if (!navContainer) return;
 
-    // เรียกใช้ Config Path ที่เราทำไว้
     const pathConfig = getPathConfig();
     const currentPage = window.location.pathname.split("/").pop() || 'index.html';
 
@@ -177,7 +155,6 @@ function injectBottomNav() {
 
     let html = `<nav class="bg-[#DC2626] text-white sticky bottom-0 w-full z-50 h-16 shadow-[0_-2px_10px_rgba(0,0,0,0.1)] flex justify-around items-center px-2">`;
     menuItems.forEach(item => {
-        // เช็ค Active ด้วย ID แทน Link เพราะ Link เปลี่ยนไปตาม Path
         const isActive = currentPage === item.id; 
         const activeClass = isActive ? 'opacity-100 scale-105 font-bold' : 'opacity-60 hover:opacity-100';
         html += `<a href="${item.link}" class="flex flex-col items-center justify-center w-14 transition duration-200 ${activeClass}"><i class="fa-solid ${item.icon} text-xl mb-1"></i><span class="text-[10px] uppercase tracking-wide">${item.name}</span></a>`;
@@ -199,12 +176,10 @@ function injectUniversalModals() {
                 <span class="font-bold text-sm"><i class="fa-solid fa-circle-check mr-2"></i>Order Matched!</span>
                 <button onclick="hideModal('modal-matched-order')" class="text-white hover:text-gray-200 transition"><i class="fa-solid fa-xmark text-lg"></i></button>
             </div>
-            
             <div class="p-5 overflow-y-auto custom-scroll">
                 <div class="flex justify-between text-[10px] text-gray-400 border-b border-gray-100 pb-2 mb-4">
                     <span id="match-time">...</span><span id="match-id">Order ID: ...</span>
                 </div>
-                
                 <div class="flex gap-4 items-start mb-4">
                     <div id="match-img" class="w-20 h-20 bg-gray-100 rounded-lg bg-cover bg-center shrink-0 border border-gray-200 shadow-sm"></div>
                     <div class="flex-1 space-y-1">
@@ -212,13 +187,11 @@ function injectUniversalModals() {
                         <div class="text-lg font-bold text-[#DC2626]" id="match-price">...</div>
                     </div>
                 </div>
-
                 <div class="bg-gray-50 p-3 rounded-lg text-sm border border-gray-100 space-y-2 mb-4">
                     <div class="flex justify-between items-center"><span class="text-gray-500 text-xs">Total Order</span><span id="match-total" class="font-bold text-gray-800">...</span></div>
                     <div class="flex justify-between items-center"><span class="text-gray-500 text-xs">Commission</span><span id="match-comm" class="font-bold text-green-600 text-lg">...</span></div>
                     <div class="flex justify-between items-center pt-2 border-t border-dashed border-gray-200 mt-2"><span class="text-gray-500 text-xs">Return Amount</span><span id="match-return" class="font-bold text-[#DC2626]">...</span></div>
                 </div>
-
                 <div class="border-t border-gray-100 pt-4 mb-2">
                     <div class="flex justify-between items-center mb-3">
                         <span class="text-xs font-bold text-gray-600">Order Rating</span>
@@ -242,7 +215,6 @@ function injectUniversalModals() {
                     </div>
                 </div>
             </div>
-
             <div class="p-4 pt-0 shrink-0">
                 <button id="btn-submit-order" onclick="confirmMatchSubmit()" class="w-full bg-[#DC2626] text-white py-3 rounded-lg font-bold shadow-lg hover:bg-red-700 active:scale-95 transition text-sm uppercase tracking-wide">Submit Order Now</button>
             </div>
@@ -252,31 +224,49 @@ function injectUniversalModals() {
     <div id="modal-deposit-step1" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-[60] p-4 font-sans backdrop-blur-sm" onclick="if(event.target===this) hideModal('modal-deposit-step1')"><div class="bg-white rounded-xl w-full max-w-xs p-6 text-center relative animate-[scaleIn_0.2s_ease-out]"><button onclick="hideModal('modal-deposit-step1')" class="absolute top-3 right-3 text-gray-400 hover:text-gray-600 transition"><i class="fa-solid fa-xmark text-lg"></i></button><div class="w-12 h-12 bg-red-50 text-[#DC2626] rounded-full flex items-center justify-center mx-auto mb-3"><i class="fa-solid fa-lock text-xl"></i></div><h3 class="font-bold mb-2 text-gray-800">ยืนยันตัวตน</h3><p class="text-xs text-gray-500 mb-4">กรุณากรอกรหัสผ่านเพื่อดำเนินการต่อ</p><input type="password" id="deposit-password" class="w-full border border-gray-200 bg-gray-50 p-3 mb-4 rounded-lg text-center outline-none focus:border-[#DC2626] transition text-sm" placeholder="รหัสผ่านของคุณ"><button onclick="verifyDepositPassword()" class="w-full bg-[#DC2626] text-white py-2.5 rounded-lg font-bold shadow-md hover:bg-red-700 transition text-sm">ยืนยัน</button></div></div>
     <div id="modal-deposit-step2" class="fixed inset-0 bg-black/70 hidden items-center justify-center z-[60] p-4 font-sans backdrop-blur-sm" onclick="if(event.target===this) closeAllModals()"><div class="bg-white rounded-xl w-full max-w-xs p-5 relative animate-[scaleIn_0.2s_ease-out]"><button onclick="closeAllModals()" class="absolute top-3 right-3 text-gray-400 hover:text-gray-600 transition"><i class="fa-solid fa-xmark text-lg"></i></button><h3 class="font-bold text-center mb-2 text-lg">ระบุยอดเงิน</h3><p class="text-xs text-center text-gray-500 mb-2">ขั้นต่ำ: <span id="dep-min" class="font-bold text-red-500">...</span></p><input type="number" id="deposit-amount" class="w-full border-b-2 border-red-200 text-center text-2xl font-bold p-2 mb-4 outline-none text-[#DC2626] placeholder-gray-300 transition focus:border-red-500" placeholder="0.00"><button id="btn-confirm-deposit" onclick="confirmDepositInput()" class="w-full bg-[#DC2626] text-white py-2.5 rounded-lg font-bold shadow-md hover:bg-red-700 transition text-sm">แจ้งเติมเงิน</button></div></div>
     <div id="modal-deposit-success" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-[90] p-4 font-sans backdrop-blur-sm"><div class="bg-white rounded-xl w-full max-w-xs p-6 text-center animate-[scaleIn_0.2s_ease-out]"><div class="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 text-green-500 text-3xl"><i class="fa-solid fa-check"></i></div><h3 class="font-bold text-lg text-gray-800">แจ้งเติมเงินสำเร็จ</h3><p class="text-sm text-gray-500 mt-2 mb-4">รายการของคุณถูกส่งแล้ว<br>กรุณาติดต่อ Admin เพื่อยืนยันยอดเงิน</p><button onclick="showAdminQR()" class="w-full bg-[#06C755] text-white py-3 rounded-lg font-bold shadow-md hover:bg-green-600 transition mb-2"><i class="fa-brands fa-line mr-1"></i> ติดต่อ Admin</button><button onclick="closeAllModals()" class="text-xs text-gray-400 hover:text-gray-600 mt-2">ปิดหน้าต่าง</button></div></div>
+    
     <div id="modal-low-balance" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-[80] p-4 font-sans" onclick="if(event.target===this) hideModal('modal-low-balance')"><div class="bg-white rounded-xl w-full max-w-xs p-6 text-center"><div class="w-12 h-12 bg-red-100 text-red-500 rounded-full flex items-center justify-center mx-auto mb-3"><i class="fa-solid fa-coins text-xl"></i></div><h3 class="text-lg font-bold text-gray-800">ยอดเงินไม่พอ</h3><p class="text-sm text-gray-500 my-2">ต้องการขั้นต่ำ: <span id="lb-min" class="text-red-600 font-bold">...</span></p><div class="flex gap-2"><button onclick="hideModal('modal-low-balance')" class="flex-1 py-2 bg-gray-100 rounded text-sm font-bold">ยกเลิก</button><button onclick="window.location.href='profile.html'" class="flex-1 py-2 bg-[#DC2626] text-white rounded text-sm font-bold">เติมเงิน</button></div></div></div>
     <div id="modal-withdraw-step1" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-[80] p-4 font-sans backdrop-blur-sm" onclick="if(event.target===this) hideModal('modal-withdraw-step1')"><div class="bg-white rounded-xl w-full max-w-sm p-5 relative animate-[scaleIn_0.2s_ease-out]"><button onclick="hideModal('modal-withdraw-step1')" class="absolute top-2 right-2 text-gray-400"><i class="fa-solid fa-xmark text-lg"></i></button><h3 class="font-bold text-center text-lg mb-4">ข้อมูลบัญชีรับเงิน</h3><div class="space-y-3"><div><label class="text-xs text-gray-500">ธนาคาร</label><input type="text" id="wd-bank-name" class="w-full border rounded p-2 text-sm" placeholder="เช่น กสิกรไทย, KBank"></div><div><label class="text-xs text-gray-500">ชื่อบัญชี</label><input type="text" id="wd-acc-name" class="w-full border rounded p-2 text-sm" placeholder="ชื่อ-นามสกุล"></div><div><label class="text-xs text-gray-500">เลขที่บัญชี</label><input type="number" id="wd-acc-no" class="w-full border rounded p-2 text-sm" placeholder="ไม่ต้องมีขีด"></div></div><button onclick="goToWithdrawStep2()" class="w-full bg-[#DC2626] text-white py-3 rounded-lg font-bold shadow-md hover:bg-red-700 active:scale-95 transition mt-5 text-sm">ถัดไป</button></div></div>
     
-	<div id="modal-withdraw-step2" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-[80] p-4 font-sans backdrop-blur-sm" onclick="if(event.target===this) hideModal('modal-withdraw-step2')"><div class="bg-white rounded-xl w-full max-w-sm p-5 relative animate-[scaleIn_0.2s_ease-out]"><button onclick="hideModal('modal-withdraw-step2')" class="absolute top-2 right-2 text-gray-400"><i class="fa-solid fa-xmark text-lg"></i></button><h3 class="font-bold text-center text-lg mb-2">รายละเอียดการถอน</h3><div class="bg-gray-50 p-3 rounded-lg text-xs space-y-2 mb-4 border border-gray-100"><div class="flex justify-between"><span>ยอดเงินสุทธิ (Net):</span> <span id="wd-total" class="font-bold text-black">...</span></div><div class="flex justify-between text-red-500"><span>ถูกแช่แข็ง (Frozen):</span> <span id="wd-frozen-show">...</span></div><div class="flex justify-between text-gray-500"><span>ค่าธรรมเนียม (<span id="wd-fee-rate">5</span>%):</span> <span id="wd-fee-amt">...</span></div><div class="border-t border-dashed border-gray-300 my-1"></div><div class="flex justify-between text-base font-bold text-[#DC2626]"><span>ถอนได้จริง:</span> <span id="wd-available">...</span></div></div><div class="relative mb-2"><input type="number" id="withdraw-amount" class="w-full border-2 border-red-100 rounded-lg p-3 pr-16 text-xl font-bold text-[#DC2626] outline-none focus:border-[#DC2626] transition" placeholder="0.00" oninput="calculateRealTimeFee(this.value)"><button onclick="fillMaxWithdraw()" class="absolute right-2 top-2 bottom-2 px-3 bg-red-100 text-[#DC2626] text-xs font-bold rounded hover:bg-red-200">MAX</button></div> 
-	<div class="flex justify-between text-xs text-gray-500 mt-2 mb-1">
-    <span>หักค่าธรรมเนียม (<span id="wd-fee-rate">5</span>%):</span>
-    <span id="wd-fee-actual" class="font-medium text-red-500">฿0.00</span>
-</div>
+    <div id="modal-withdraw-step2" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-[80] p-4 font-sans backdrop-blur-sm" onclick="if(event.target===this) hideModal('modal-withdraw-step2')">
+        <div class="bg-white rounded-xl w-full max-w-sm p-5 relative animate-[scaleIn_0.2s_ease-out]">
+            <button onclick="hideModal('modal-withdraw-step2')" class="absolute top-2 right-2 text-gray-400"><i class="fa-solid fa-xmark text-lg"></i></button>
+            <h3 class="font-bold text-center text-lg mb-2">รายละเอียดการถอน</h3>
+            
+            <div class="bg-gray-50 p-3 rounded-lg text-xs space-y-2 mb-4 border border-gray-100">
+                <div class="flex justify-between"><span>ยอดเงินสุทธิ (Net):</span> <span id="wd-total" class="font-bold text-black">...</span></div>
+                <div class="flex justify-between text-red-500"><span>ถูกแช่แข็ง (Frozen):</span> <span id="wd-frozen-show">...</span></div>
+                <div class="border-t border-dashed border-gray-300 my-1"></div>
+                <div class="flex justify-between text-base font-bold text-[#DC2626]"><span>ถอนได้จริง:</span> <span id="wd-available">...</span></div>
+            </div>
 
-<div class="flex justify-between items-center bg-gray-50 p-3 rounded-lg border border-gray-200 mb-4">
-    <span class="text-xs font-bold text-gray-600">ยอดเงินที่จะได้รับ:</span>
-    <span id="wd-net-amount" class="text-2xl font-bold text-green-600">฿0.00</span>
-</div>
-	
-	<input type="password" id="withdraw-password" class="w-full border border-gray-200 rounded-lg p-2 text-center text-sm mb-4" placeholder="รหัสผ่านยืนยัน"><button onclick="confirmWithdrawal()" class="w-full bg-[#DC2626] text-white py-3 rounded-lg font-bold shadow-md hover:bg-red-700 active:scale-95 transition text-sm">ยืนยันการถอน</button></div></div>
-    
-	<div id="modal-withdraw-success" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-[90] p-4 font-sans backdrop-blur-sm"><div class="bg-white rounded-xl w-full max-w-xs p-6 text-center animate-[scaleIn_0.2s_ease-out]"><div class="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 text-green-500 text-3xl"><i class="fa-solid fa-check"></i></div><h3 class="font-bold text-lg text-gray-800">ดำเนินการแล้ว</h3><p class="text-sm text-gray-500 mt-2 mb-4">รายการถอนของคุณถูกส่งแล้ว<br>กรุณาติดต่อ Admin เพื่ออนุมัติยอดเงิน</p><button onclick="showAdminQR()" class="w-full bg-[#06C755] text-white py-3 rounded-lg font-bold shadow-md hover:bg-green-600 transition mb-2"><i class="fa-brands fa-line mr-1"></i> ติดต่อ Admin</button><button onclick="closeAllModals()" class="text-xs text-gray-400 hover:text-gray-600 mt-2">ปิดหน้าต่าง</button></div></div>
+            <div class="relative mb-2">
+                <input type="number" id="withdraw-amount" class="w-full border-2 border-red-100 rounded-lg p-3 pr-16 text-xl font-bold text-[#DC2626] outline-none focus:border-[#DC2626] transition" placeholder="0.00" oninput="calculateRealTimeFee(this.value)">
+                <button onclick="fillMaxWithdraw()" class="absolute right-2 top-2 bottom-2 px-3 bg-red-100 text-[#DC2626] text-xs font-bold rounded hover:bg-red-200">MAX</button>
+            </div>
+
+            <div class="flex justify-between text-xs text-gray-500 mt-2 mb-1">
+                <span>หักค่าธรรมเนียม (<span id="wd-fee-rate">5</span>%):</span>
+                <span id="wd-fee-actual" class="font-medium text-red-500">฿0.00</span>
+            </div>
+            <div class="flex justify-between items-center bg-gray-50 p-3 rounded-lg border border-gray-200 mb-4">
+                <span class="text-xs font-bold text-gray-600">ยอดเงินที่จะได้รับ:</span>
+                <span id="wd-net-amount" class="text-2xl font-bold text-green-600">฿0.00</span>
+            </div>
+
+            <input type="password" id="withdraw-password" class="w-full border border-gray-200 rounded-lg p-2 text-center text-sm mb-4" placeholder="รหัสผ่านยืนยัน">
+            <button onclick="confirmWithdrawal()" class="w-full bg-[#DC2626] text-white py-3 rounded-lg font-bold shadow-md hover:bg-red-700 active:scale-95 transition text-sm">ยืนยันการถอน</button>
+        </div>
+    </div>
+
+    <div id="modal-withdraw-success" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-[90] p-4 font-sans backdrop-blur-sm"><div class="bg-white rounded-xl w-full max-w-xs p-6 text-center animate-[scaleIn_0.2s_ease-out]"><div class="w-14 h-14 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4 text-green-500 text-3xl"><i class="fa-solid fa-check"></i></div><h3 class="font-bold text-lg text-gray-800">ดำเนินการแล้ว</h3><p class="text-sm text-gray-500 mt-2 mb-4">รายการถอนของคุณถูกส่งแล้ว<br>กรุณาติดต่อ Admin เพื่ออนุมัติยอดเงิน</p><button onclick="showAdminQR()" class="w-full bg-[#06C755] text-white py-3 rounded-lg font-bold shadow-md hover:bg-green-600 transition mb-2"><i class="fa-brands fa-line mr-1"></i> ติดต่อ Admin</button><button onclick="closeAllModals()" class="text-xs text-gray-400 hover:text-gray-600 mt-2">ปิดหน้าต่าง</button></div></div>
     <div id="modal-admin-qr" class="fixed inset-0 bg-black/80 hidden items-center justify-center z-[100] p-4 font-sans backdrop-blur-sm"><div class="bg-white rounded-xl w-full max-w-xs p-5 relative text-center"><button onclick="hideModal('modal-admin-qr')" class="absolute top-2 right-2 text-gray-400"><i class="fa-solid fa-xmark text-lg"></i></button><h3 class="font-bold text-gray-800 mb-4">Scan to Contact Admin</h3><div class="bg-gray-100 w-48 h-48 mx-auto rounded-lg flex items-center justify-center border-2 border-dashed border-gray-300 mb-4 overflow-hidden"><img src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=https://line.me/ti/p/~admin_id" class="w-full h-full object-cover"></div><p class="text-xs text-gray-500">แคปหน้าจอเพื่อสแกนในไลน์</p></div></div>
     
     <div id="floating-notif" class="fixed top-14 right-2 w-72 bg-white shadow-xl rounded-xl border border-gray-100 z-[100] hidden flex-col max-h-[400px] overflow-y-auto mr-auto max-w-xl" style="right: max(0.5rem, calc(50% - 280px));"><div class="p-3 border-b border-gray-100 bg-gray-50 font-bold text-xs text-gray-600 flex justify-between items-center"><span>การแจ้งเตือน</span><span class="text-[10px] text-gray-400 cursor-pointer" onclick="toggleFloatingNotif()">ปิด</span></div><div id="notif-list" class="divide-y divide-gray-50"><div class="p-4 text-center text-xs text-gray-400">กำลังโหลด...</div></div></div>
     
     <div id="about-us" class="fixed inset-0 z-[150] bg-[#f3f4f6] hidden flex-col w-full h-full font-sans max-w-xl mx-auto left-0 right-0"><div class="bg-[#DC2626] text-white h-14 flex items-center px-4 shadow-md shrink-0 sticky top-0 z-50 justify-between"><button onclick="toggleAboutUs()" class="hover:bg-white/20 rounded-full w-8 h-8 flex items-center justify-center transition"><i class="fa-solid fa-chevron-left text-lg"></i></button><h1 class="text-lg font-bold">เกี่ยวกับเรา</h1><div class="w-8"></div></div><div class="flex-1 overflow-y-auto p-4 custom-scroll pb-20"><div class="bg-white rounded-xl shadow-sm p-5 mb-6">
     <div class="text-right text-xs text-gray-400 mb-4">About Us</div>
-                    
-                    <p class="leading-relaxed">
+   <p class="leading-relaxed">
                         At CSP, we partner with consumer businesses around the world to identify, assess and select the best talent for your executive leadership roles.
 We work actively in all areas of a business, from product and marketing to sales, finance, HR and IT
                     </p>      
@@ -308,12 +298,10 @@ Recent projects and assignments completed by our Directors include:</p>
 						Change is an ever-present part of business. In just a few years, we have moved from e-commerce to multi-channel and centralized commerce, creating new technologies, disciplines and expertise. But what has remained constant is the
 						need for top talent in a rapidly changing landscape.</p>
                     </div>
-
-                   
-                </div>
     </div></div></div>
 
     <div id="modal-news" class="fixed inset-0 z-[150] bg-[#f3f4f6] hidden flex-col w-full h-full font-sans max-w-xl mx-auto left-0 right-0"><div class="bg-[#DC2626] text-white h-14 flex items-center px-4 shadow-md shrink-0 sticky top-0 z-50 justify-between"><button onclick="toggleNewsModal()" class="hover:bg-white/20 rounded-full w-8 h-8 flex items-center justify-center transition"><i class="fa-solid fa-chevron-left text-lg"></i></button><h1 class="text-lg font-bold">ข่าวสาร</h1><div class="w-8"></div></div><div class="flex-1 overflow-y-auto p-4 custom-scroll pb-20"><div class="bg-white rounded-xl shadow-sm p-5 mb-6">
+    <div class="text-right text-xs text-gray-400 mb-4">2023-11-04 18:54:28</div>
     <div class="text-right text-xs text-gray-400 mb-4">2023-11-04 18:54:28</div>
     <p class="leading-relaxed">
                         เนื่องในโอกาสฉลองครบรอบ 24 ปี CONSUMER PARTNER ได้เปิดตัวกิจกรรมดังต่อไปนี้เพื่อขอบคุณผู้ใช้ใหม่และผู้ใช้เก่าที่ให้การสนับสนุน CONSUMER PARTNER ของเราเป็นอย่างดี
@@ -371,8 +359,6 @@ function listenToUserDoc(docId) {
             currentBalance = parseFloat(userData.balance || 0);
             calculateAndShowBalance(); 
             if(!currentLevelConfig || (currentLevelConfig.name !== userData.level)) fetchLevelConfig();
-            
-            // ✅ ตัด Heartbeat ออกแล้ว (ปลอดภัย)
         }
     });
 }
@@ -419,7 +405,7 @@ function setupPendingWithdrawalMonitor() {
     });
 }
 
-// --- Notifications Logic (Your Custom Code Preserved) ---
+// --- Notifications Logic ---
 function setupNoIndexNotifications() {
     if(!window.db || !userData) return;
     window.db.collection("notifications").where("user_id", "==", realDocId).limit(20).onSnapshot(snap => { handleNotifUpdate('general', snap); });
@@ -636,7 +622,6 @@ async function confirmMatchSubmit() {
             window.db.collection("orders").doc(order.docId).update({ 
                 status: 'completed', 
                 pay_time: new Date().toISOString(),
-                // ✅ อัปเดต timestamp เป็นปัจจุบันเพื่อให้เด้งไปบนสุด
                 timestamp: new Date().toISOString(), 
                 rating: parseInt(rating),
                 review: review
@@ -671,21 +656,31 @@ async function showDepositInput() { showModal('modal-deposit-step2'); setTxt('de
 async function confirmDepositInput() { if (!window.db) { showCustomAlert('ข้อผิดพลาด', 'ไม่สามารถเชื่อมต่อฐานข้อมูลได้\nกรุณารีเฟรชหน้าจอแล้วลองใหม่'); return; } const amtInput = document.getElementById('deposit-amount'); const amt = parseFloat(amtInput.value); if (!realDocId) { let stored = localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser')) : null; if(stored && stored.docId) { realDocId = stored.docId; userData = stored; } } if (!realDocId) { showCustomAlert('หมดเวลาเชื่อมต่อ', 'ไม่พบข้อมูลผู้ใช้ (Session Expired)\nกรุณาล็อกอินใหม่'); return; } const netBalance = currentBalance - totalFrozenAmount; let minRequired = (netBalance < 0) ? Math.abs(netBalance) : 0; if(!amt || amt <= 0) return showCustomAlert('แจ้งเตือน', 'กรุณาระบุจำนวนเงินให้ถูกต้อง'); if (netBalance < 0 && amt < minRequired) { return showCustomAlert('ยอดเงินไม่ถูกต้อง', `บัญชีของคุณติดลบ ${formatMoney(Math.abs(netBalance))}\nต้องเติมขั้นต่ำ ${formatMoney(minRequired)} เพื่อปลดล็อค`); } const btn = document.getElementById('btn-confirm-deposit'); const oldText = btn.innerHTML; btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> กำลังส่งข้อมูล...'; btn.disabled = true; try { const payload = { user_id: String(realDocId), username: userData.username || 'Unknown', amount: Number(amt), status: 'pending', timestamp: new Date().toISOString() }; await withTimeout(window.db.collection("recharges").add(payload), 10000); hideModal('modal-deposit-step2'); showModal('modal-deposit-success'); amtInput.value = ''; } catch(e) { console.error("Deposit Error:", e); if (JSON.stringify(e).includes("Quota exceeded") || e.code === "resource-exhausted") { showCustomAlert('ระบบเต็มขีดจำกัด', 'โควต้า Database รายวันเต็มแล้ว (Quota Exceeded)\nกรุณารอระบบรีเซ็ต หรืออัปเกรด Plan'); } else { showCustomAlert('เกิดข้อผิดพลาด', `ส่งข้อมูลไม่สำเร็จ: ${e.message || 'Unknown Error'}`); } } finally { btn.innerHTML = oldText; btn.disabled = false; } }
 function startWithdrawal() { if(!userData) return; document.getElementById('wd-bank-name').value = ''; document.getElementById('wd-acc-name').value = ''; document.getElementById('wd-acc-no').value = ''; showModal('modal-withdraw-step1'); }
 async function goToWithdrawStep2() { const bank = document.getElementById('wd-bank-name').value.trim(); const accName = document.getElementById('wd-acc-name').value.trim(); const accNo = document.getElementById('wd-acc-no').value.trim(); if(!bank || !accName || !accNo) return showCustomAlert('ข้อมูลไม่ครบ', 'กรุณากรอกข้อมูลบัญชีให้ครบถ้วน'); withdrawInfo.bankName = bank; withdrawInfo.accName = accName; withdrawInfo.accNo = accNo; const btn = document.querySelector('#modal-withdraw-step1 button'); const oldText = btn.innerHTML; btn.innerHTML = 'Computing...'; btn.disabled = true; try { let feePercent = 5; if(currentLevelConfig && currentLevelConfig.withdrawal_fee !== undefined) { feePercent = parseFloat(currentLevelConfig.withdrawal_fee); } const available = (currentBalance - totalFrozenAmount) > 0 ? (currentBalance - totalFrozenAmount) : 0; withdrawInfo.feeRate = feePercent; withdrawInfo.available = available; setTxt('wd-total', formatMoney(currentBalance)); setTxt('wd-pending-show', formatMoney(withdrawInfo.pendingWithdraw)); setTxt('wd-frozen-show', formatMoney(totalFrozenAmount)); setTxt('wd-fee-rate', feePercent); setTxt('wd-fee-amt', '฿0.00'); setTxt('wd-available', formatMoney(withdrawInfo.available)); hideModal('modal-withdraw-step1'); showModal('modal-withdraw-step2'); } catch(e) { showCustomAlert('Error', e.message); } finally { btn.innerHTML = oldText; btn.disabled = false; } }
-function calculateRealTimeFee(val) {
+
+// ✅ FIXED: Calculate Real Time Fee and Update New Big Text
+function calculateRealTimeFee(val) { 
     const amount = parseFloat(val); 
     
-    // ... (คำนวณ fee และ net) ...
+    // Helper to update UI
+    const updateUI = (fee, net) => {
+         const feeEl = document.getElementById('wd-fee-actual');
+         if(feeEl) feeEl.innerText = `฿${fee.toLocaleString(undefined, {minimumFractionDigits:2})}`;
+         
+         const netEl = document.getElementById('wd-net-amount');
+         if(netEl) netEl.innerText = `฿${net.toLocaleString(undefined, {minimumFractionDigits:2})}`;
+    };
+
+    if (!amount || amount <= 0) { 
+        updateUI(0, 0);
+        return; 
+    } 
+    
     const fee = (amount * withdrawInfo.feeRate) / 100; 
     const net = amount - fee;
-
-    // ส่งค่าไปที่ตัวแสดงผลใหม่ 2 ตัว
     
-    // 1. ส่งค่าธรรมเนียม
-    document.getElementById('wd-fee-actual').innerText = `฿${fee.toLocaleString(...)};
-    
-    // 2. ส่งค่ายอดรับสุทธิ (ตัวใหญ่)
-    document.getElementById('wd-net-amount').innerText = `฿${net.toLocaleString(...)};
+    updateUI(fee, net);
 }
+
 function fillMaxWithdraw() { const amt = Math.floor(withdrawInfo.available); document.getElementById('withdraw-amount').value = amt; calculateRealTimeFee(amt); }
 async function confirmWithdrawal() { const amount = parseFloat(document.getElementById('withdraw-amount').value); const pwd = document.getElementById('withdraw-password').value; if(!amount || amount <= 0) return showCustomAlert('แจ้งเตือน', 'กรุณาระบุจำนวนเงิน'); if(amount > withdrawInfo.available) return showCustomAlert('ยอดเงินไม่พอ', 'ยอดเงินที่ถอนได้ไม่เพียงพอ (อาจติด Frozen)'); if(pwd !== (userData.password || '123456')) return showCustomAlert('รหัสผิด', 'รหัสผ่านไม่ถูกต้อง'); if(!confirm(`ยืนยันการถอน ${formatMoney(amount)}?`)) return; const btn = document.querySelector('#modal-withdraw-step2 button'); const oldHtml = btn.innerHTML; btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Processing...'; btn.disabled = true; try { const feeAmt = (amount * withdrawInfo.feeRate) / 100; await window.db.collection("withdrawals").add({ user_id: realDocId, username: userData.username, bank_name: withdrawInfo.bankName, account_name: withdrawInfo.accName, account_number: withdrawInfo.accNo, amount: amount, fee: feeAmt, fee_rate: withdrawInfo.feeRate, net_amount: amount - feeAmt, status: 'pending', timestamp: new Date().toISOString() }); const newBalance = currentBalance - amount; await window.db.collection("users").doc(realDocId).update({ balance: newBalance }); hideModal('modal-withdraw-step2'); showCustomAlert('สำเร็จ', 'ส่งคำขอถอนเงินแล้ว', true); } catch(e) { showCustomAlert('Error', e.message); } finally { btn.innerHTML = oldHtml; btn.disabled = false; } }
 function showAdminQR() { hideModal('modal-withdraw-success'); hideModal('modal-deposit-success'); showModal('modal-admin-qr'); }
@@ -698,7 +693,6 @@ function logout() {
         localStorage.removeItem('currentUser'); 
         localStorage.removeItem('frozenAmount'); 
         
-        // แก้ไข: ใช้ Path Config เพื่อดีดไปหน้า Login ให้ถูกที่
         const pathConfig = getPathConfig();
         window.location.href = pathConfig.prefix + 'login.html'; 
     } 
