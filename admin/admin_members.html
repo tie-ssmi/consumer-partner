@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <title>Admin - รายชื่อสมาชิก</title>
+    <link rel="stylesheet" href="admin_style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <style>
+        .table-wrapper { overflow-x: auto; white-space: nowrap; padding-bottom: 20px; } 
+        th, td { padding: 12px 10px; font-size: 11px; vertical-align: middle; border-bottom: 1px solid #f3f4f6; text-align: center; }
+        th { background-color: #f9fafb; font-weight: 600; color: #4b5563; }
+        tr:hover { background-color: #f8fafc; transition: 0.2s; }
+        .btn-action { padding: 4px 8px; border-radius: 4px; font-size: 10px; color: white; margin: 0 2px; transition: 0.2s; }
+        .btn-inject { background-color: #ef4444; } .btn-orders { background-color: #0ea5e9; } .btn-level { background-color: #f59e0b; } .btn-reset { background-color: #64748b; } 
+        .btn-action:hover { opacity: 0.8; transform: scale(1.05); }
+        .modal-scale-in { animation: scaleIn 0.2s ease-out forwards; }
+        @keyframes scaleIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans">
+    <script src="admin_ui.js"></script>
+    <script src="firebase_setup.js"></script> 
+
+    <script>
+        renderAdminUI('members', 'list'); 
+
+        document.getElementById('main-content').innerHTML = `
+            <div class="bg-white p-5 shadow-sm border-b flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold text-gray-800">👥 รายชื่อสมาชิก (Member List)</h2>
+                <div class="flex gap-2">
+                    <button onclick="openAddMemberModal()" class="bg-white border border-gray-300 text-gray-600 px-3 py-1.5 rounded text-xs hover:bg-gray-50 font-bold shadow-sm transition">
+                        <i class="fa-solid fa-user-plus text-green-500"></i> เพิ่มสมาชิก
+                    </button>
+                </div>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4 mx-4">
+                <div class="flex gap-2">
+                    <input type="text" id="search-input" onkeyup="renderTable()" placeholder="ค้นหาสมาชิก..." class="border px-3 py-2 text-xs rounded w-64 focus:outline-none focus:border-indigo-500">
+                    <button class="bg-indigo-600 text-white px-4 py-2 rounded text-xs shadow hover:bg-indigo-700">ค้นหา</button>
+                </div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 mx-4 overflow-hidden">
+                <div class="table-wrapper custom-scroll">
+                    <table class="w-full">
+                        <thead>
+                            <tr>
+                                <th><input type="checkbox"></th>
+                                <th>ไอดี</th>
+                                <th>เวลาลงทะเบียน</th>
+                                <th>หมายเลขโทรศัพท์</th>
+                                <th>ชื่อผู้ใช้</th>
+                                <th>ระดับ</th>
+                                <th>ยอดสั่งซื้อวันนี้</th>
+                                <th>รหัสเชิญ</th>
+                                <th class="text-right">ยอดเงินรวม</th>
+                                <th class="text-right text-blue-600">ยอดที่ใช้ได้</th> <th>สถานะออนไลน์</th>
+                                <th>ดำเนินการ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="users-body"><tr><td colspan="12" class="text-center p-12 text-gray-400">กำลังโหลดข้อมูล...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        // Modals Code (Add Member, Level, History) - คงเดิมไว้
+        const modalAddHtml = `<div id="modal-add-member" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 backdrop-blur-sm font-sans"><div class="bg-white rounded-lg shadow-2xl w-full max-w-lg modal-scale-in overflow-hidden"><div class="flex justify-between items-center p-4 border-b"><h3 class="font-bold text-gray-700">เพิ่มสมาชิก</h3><button onclick="closeModal('modal-add-member')" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button></div><div class="p-6 space-y-4"><div class="flex items-center gap-4"><label class="w-32 text-right text-xs font-bold text-gray-600">ตัวแทนระดับ 1</label><select id="add-agent" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 bg-gray-50"><option value="platform">Platform (Admin)</option></select></div><div class="flex items-center gap-4"><label class="w-32 text-right text-xs font-bold text-gray-600">ชื่อผู้ใช้</label><input type="text" id="add-username" placeholder="โปรดป้อนชื่อผู้ใช้" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"></div><div class="flex items-center gap-4"><label class="w-32 text-right text-xs font-bold text-gray-600">หมายเลขโทรศัพท์ <span class="text-red-500">*</span></label><div class="flex-1 flex border border-gray-300 rounded overflow-hidden"><select id="add-country-code" class="bg-gray-50 px-2 py-2 text-sm border-r border-gray-300 focus:outline-none font-bold text-gray-700 cursor-pointer"><option value="+66">🇹🇭 +66</option><option value="+856">🇱🇦 +856</option><option value="+95">🇲🇲 +95</option><option value="+84">🇻🇳 +84</option><option value="+855">🇰🇭 +855</option><option value="+60">🇲🇾 +60</option><option value="+99">🏳️ +99</option></select><input type="tel" id="add-phone" placeholder="ไม่ต้องใส่ 0 นำหน้า" class="flex-1 px-3 py-2 text-sm focus:outline-none"></div></div><div class="flex items-center gap-4"><label class="w-32 text-right text-xs font-bold text-gray-600">รหัสผ่าน <span class="text-red-500">*</span></label><input type="text" id="add-password" placeholder="โปรดป้อนรหัสผ่าน" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"></div><div class="flex items-center gap-4"><label class="w-32 text-right text-xs font-bold text-gray-600">รหัสผู้แนะนำ</label><input type="text" id="add-upline" placeholder="ระบุรหัสผู้แนะนำ (ถ้ามี)" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"></div></div><div class="bg-gray-50 p-4 flex justify-center gap-3 border-t"><button onclick="saveNewMember()" class="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded text-sm font-bold shadow hover:shadow-md transition">ส่งข้อมูล</button><button onclick="closeModal('modal-add-member')" class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded text-sm font-bold shadow hover:shadow-md transition">ยกเลิก</button></div></div></div>`;
+        document.body.insertAdjacentHTML('beforeend', modalAddHtml);
+
+        const modalLevelHtml = `<div id="modal-level" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 backdrop-blur-sm font-sans"><div class="bg-white rounded-lg shadow-2xl w-full max-w-lg modal-scale-in overflow-hidden"><div class="flex justify-between items-center p-4 border-b"><h3 class="font-bold text-gray-700">ระดับการแก้ไข</h3><button onclick="closeModal('modal-level')" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button></div><div class="p-6 space-y-4"><input type="hidden" id="edit-lvl-uid"><div class="flex items-center gap-4"><label class="w-32 text-right text-xs font-bold text-gray-600">ระดับสมาชิก <span class="text-red-500">*</span></label><select id="edit-lvl-select" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"></select></div><div class="flex items-center gap-4"><label class="w-32 text-right text-xs font-bold text-gray-600">กลุ่มโอเวอร์เลย์ <span class="text-red-500">*</span></label><select id="edit-lvl-overlay" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"><option value="none">ไม่เข้าร่วม (None)</option><option value="group_a">Group A</option><option value="group_b">Group B</option></select></div><div class="flex items-center gap-4"><label class="w-32 text-right text-xs font-bold text-gray-600">จำนวนงานระดับ</label><input type="number" id="edit-lvl-orders" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"></div></div><div class="bg-gray-50 p-4 flex justify-center gap-3 border-t"><button onclick="saveLevel()" class="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded text-sm font-bold">ส่ง</button><button onclick="closeModal('modal-level')" class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded text-sm font-bold">ยกเลิก</button></div></div></div>`;
+        document.body.insertAdjacentHTML('beforeend', modalLevelHtml);
+
+        const modalHistoryHtml = `<div id="modal-history" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 backdrop-blur-sm"><div class="bg-white rounded-lg shadow-2xl w-full max-w-4xl p-6 modal-scale-in h-[80vh] flex flex-col"><div class="flex justify-between items-center mb-4 border-b pb-2"><h3 class="font-bold text-gray-800"><i class="fa-solid fa-syringe text-red-500"></i> ประวัติธุรกรรม / แก้ไขยอด (ฉีด)</h3><button onclick="closeModal('modal-history')" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button></div><div class="flex-1 overflow-y-auto custom-scroll"><table class="w-full text-left"><thead><tr class="bg-gray-100 text-xs text-gray-600"><th class="p-2">ประเภท</th><th class="p-2 text-right">จำนวนเงิน</th><th class="p-2 text-center">สถานะ</th><th class="p-2">เวลา</th><th class="p-2 text-center">จัดการ</th></tr></thead><tbody id="history-body" class="text-xs"></tbody></table></div></div></div>`;
+        document.body.insertAdjacentHTML('beforeend', modalHistoryHtml);
+
+        // --- LOGIC ---
+        let allUsers = [];
+        let frozenMap = {}; // ✅ ตัวแปรเก็บยอด Frozen ของแต่ละคน
+
+        async function initData() {
+            if (!window.db) return setTimeout(initData, 1000);
+            
+            // โหลด Levels
+            const levelsSnap = await db.collection("member_levels").orderBy("price", "asc").get();
+            const levelSelect = document.getElementById('edit-lvl-select');
+            levelSelect.innerHTML = '';
+            levelsSnap.forEach(doc => { const option = document.createElement('option'); option.value = doc.data().name; option.innerText = doc.data().name; levelSelect.appendChild(option); });
+
+            // ✅ 1. ดักจับออเดอร์ที่ Frozen ทั้งหมดมาคำนวณรอไว้
+            db.collection("orders").where("status", "==", "frozen").onSnapshot(snap => {
+                frozenMap = {}; // Reset
+                snap.forEach(doc => {
+                    const d = doc.data();
+                    if(d.username && d.amount) {
+                        // บวกยอด Frozen รวมตาม Username
+                        frozenMap[d.username] = (frozenMap[d.username] || 0) + parseFloat(d.amount);
+                    }
+                });
+                renderTable(); // อัปเดตตารางเมื่อยอด Frozen เปลี่ยน
+            });
+
+            // ✅ 2. ดักจับข้อมูล Users
+            db.collection("users").onSnapshot(snap => {
+                allUsers = [];
+                snap.forEach(doc => allUsers.push({ docId: doc.id, ...doc.data() }));
+                renderTable();
+            });
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('users-body');
+            const search = document.getElementById('search-input').value.toLowerCase();
+            const now = new Date(); 
+
+            allUsers.sort((a,b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+
+            let html = '';
+            allUsers.forEach(u => {
+                if (search && !u.username.toLowerCase().includes(search) && !u.phone.includes(search)) return;
+                
+                // คำนวณ Online Status
+                let statusHtml = '<span class="px-2 py-0.5 rounded text-[10px] bg-gray-100 text-gray-400">ไม่เคยใช้งาน</span>';
+                if (u.last_active) {
+                    const lastActiveTime = new Date(u.last_active);
+                    const diffMinutes = (now - lastActiveTime) / 1000 / 60; 
+                    if (diffMinutes < 2) { 
+                        statusHtml = '<span class="px-2 py-0.5 rounded text-[10px] bg-green-100 text-green-700 font-bold">Online</span>';
+                    } else {
+                        const timeStr = lastActiveTime.toLocaleString('th-TH', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' });
+                        statusHtml = `<span class="px-2 py-0.5 rounded text-[10px] bg-gray-100 text-gray-500">Offline (${timeStr})</span>`;
+                    }
+                }
+
+                // ✅ คำนวณยอดเงิน
+                const totalBalance = parseFloat(u.balance || 0);
+                const frozenAmount = frozenMap[u.username] || 0;
+                const availableBalance = totalBalance - frozenAmount;
+
+                html += `
+                    <tr class="border-b last:border-b-0 hover:bg-gray-50">
+                        <td><input type="checkbox"></td>
+                        <td>${u.id || '-'}</td>
+                        <td class="text-gray-500 text-[10px]">${u.created_at ? new Date(u.created_at).toLocaleString('th-TH') : '-'}</td>
+                        <td>${u.phone || '-'}</td>
+                        <td class="font-bold text-blue-600">${u.username}</td>
+                        <td><span class="px-2 py-0.5 rounded text-[10px] border font-bold text-purple-600 bg-purple-50 border-purple-100">${u.level || 'ทั่วไป'}</span></td>
+                        <td>${u.todayCount || 0}/42</td>
+                        <td class="font-mono text-gray-500">${u.invite_code || '-'}</td>
+                        <td class="text-right font-bold text-gray-700">฿${totalBalance.toLocaleString()}</td>
+                        <td class="text-right font-bold text-blue-600">฿${availableBalance.toLocaleString()}</td> <td>${statusHtml}</td>
+                        <td class="flex justify-center py-2">
+                            <button onclick="openHistory('${u.docId}')" class="btn-action btn-inject">ฉีด</button>
+                            <button onclick="alert('กำลังพัฒนา')" class="btn-action btn-orders">คำสั่งซื้อ</button>
+                            <button onclick="openLevelEdit('${u.docId}')" class="btn-action btn-level">ระดับ</button>
+                            <button onclick="alert('กำลังพัฒนา')" class="btn-action btn-reset">รีเซ็ต</button>
+                        </td>
+                    </tr>`;
+            });
+            tbody.innerHTML = html || '<tr><td colspan="12" class="text-center p-8 text-gray-400">ไม่พบสมาชิก</td></tr>';
+        }
+
+        window.openAddMemberModal = () => { document.getElementById('add-username').value = ''; document.getElementById('add-phone').value = ''; document.getElementById('add-password').value = ''; document.getElementById('add-upline').value = ''; const modal = document.getElementById('modal-add-member'); modal.classList.remove('hidden'); modal.classList.add('flex'); }
+        window.saveNewMember = async () => { const username = document.getElementById('add-username').value.trim(); const countryCode = document.getElementById('add-country-code').value; let phoneBody = document.getElementById('add-phone').value.trim(); const password = document.getElementById('add-password').value.trim(); const upline = document.getElementById('add-upline').value.trim() || 'admin'; if(!phoneBody || !password) { alert("กรุณากรอกเบอร์โทรและรหัสผ่าน"); return; } if (phoneBody.startsWith('0')) { phoneBody = phoneBody.substring(1); } const fullPhone = `${countryCode} ${phoneBody}`; try { const check = await db.collection("users").where("phone", "==", fullPhone).get(); if(!check.empty) { alert("เบอร์โทรศัพท์นี้มีผู้ใช้งานแล้ว"); return; } const randomId = Math.floor(100000 + Math.random() * 900000); const randomInvite = Math.floor(100000 + Math.random() * 900000).toString(); await db.collection("users").add({ username: username || phoneBody, phone: fullPhone, password: password, upline: upline, balance: 0, level: "VIP 1", id: randomId, invite_code: randomInvite, created_at: new Date().toISOString(), todayCount: 0, online: false }); closeModal('modal-add-member'); alert(`เพิ่มสมาชิกสำเร็จ! (รหัสเชิญ: ${randomInvite})`); } catch(e) { alert("Error: " + e.message); } }
+        window.openLevelEdit = (docId) => { const user = allUsers.find(u => u.docId === docId); if (!user) return; document.getElementById('edit-lvl-uid').value = docId; document.getElementById('edit-lvl-select').value = user.level || 'VIP 1'; document.getElementById('edit-lvl-overlay').value = user.overlay_group || 'none'; document.getElementById('edit-lvl-orders').value = user.todayCount || 0; const modal = document.getElementById('modal-level'); modal.classList.remove('hidden'); modal.classList.add('flex'); }
+        window.saveLevel = async () => { const docId = document.getElementById('edit-lvl-uid').value; try { await db.collection("users").doc(docId).update({ level: document.getElementById('edit-lvl-select').value, overlay_group: document.getElementById('edit-lvl-overlay').value, todayCount: parseInt(document.getElementById('edit-lvl-orders').value) || 0 }); closeModal('modal-level'); } catch(e) { alert(e.message); } }
+        window.openHistory = async (docId) => { document.getElementById('history-body').innerHTML = '<tr><td colspan="5" class="text-center p-4">กำลังโหลด...</td></tr>'; const modal = document.getElementById('modal-history'); modal.classList.remove('hidden'); modal.classList.add('flex'); let html = ''; const rSnap = await db.collection("recharges").where("user_id", "==", docId).get(); rSnap.forEach(d => { html += `<tr class="border-b"><td class="p-2 text-green-600">เติมเงิน</td><td class="p-2 text-right text-green-600">+${Number(d.data().amount).toLocaleString()}</td><td class="p-2 text-center">${d.data().status}</td><td class="p-2 text-gray-500">${new Date(d.data().timestamp).toLocaleString()}</td><td class="p-2 text-center"><button onclick="delTx('recharges','${d.id}')" class="text-red-500"><i class="fa-solid fa-trash"></i></button></td></tr>`; }); const wSnap = await db.collection("withdrawals").where("user_id", "==", docId).get(); wSnap.forEach(d => { html += `<tr class="border-b"><td class="p-2 text-red-600">ถอนเงิน</td><td class="p-2 text-right text-red-600">-${Number(d.data().amount).toLocaleString()}</td><td class="p-2 text-center">${d.data().status}</td><td class="p-2 text-gray-500">${new Date(d.data().timestamp).toLocaleString()}</td><td class="p-2 text-center"><button onclick="delTx('withdrawals','${d.id}')" class="text-red-500"><i class="fa-solid fa-trash"></i></button></td></tr>`; }); document.getElementById('history-body').innerHTML = html || '<tr><td colspan="5" class="text-center p-4">ไม่มีประวัติ</td></tr>'; }
+        window.delTx = async (col, id) => { if(confirm('ลบรายการนี้?')) { await db.collection(col).doc(id).delete(); alert('ลบแล้ว'); closeModal('modal-history'); } }
+        window.closeModal = (id) => { const el = document.getElementById(id); el.classList.add('hidden'); el.classList.remove('flex'); }
+
+        initData();
+    </script>
+</body>
+</html>

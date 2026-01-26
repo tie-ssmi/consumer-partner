@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html lang="th">
+<head><meta charset="UTF-8"><title>Mall</title><link rel="stylesheet" href="admin_style.css"><script src="https://cdn.tailwindcss.com"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></head>
+<body>
+    <script src="admin_ui.js"></script>
+    <script>
+        renderAdminUI('mall', 'mall');
+        document.getElementById('main-content').innerHTML = `
+            <div class="px-4 py-3 flex justify-between bg-white border-b mb-4 shadow-sm"><span class="text-gray-600 font-bold">จัดการห้างสรรพสินค้า</span><button class="bg-[#00a65a] text-white px-3 py-1 rounded text-xs">เพิ่มข้อมูล</button></div>
+            <div class="bg-white rounded shadow border-t-2 border-[#d2d6de] p-10 text-center text-gray-400 text-xs">ไม่มีข้อมูล</div>
+        `;
+    </script>
+</body>
+</html>

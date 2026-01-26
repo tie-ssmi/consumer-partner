@@ -1,0 +1,57 @@
+/* --- ตั้งค่าตัวแปรสีและฟอนต์ --- */
+:root {
+    --primary-color: #D32F2F;       /* สีแดงหลัก */
+    --primary-hover: #b71c1c;       /* สีแดงตอนเอาเมาส์ชี้ */
+    --secondary-color: #fbbf24;     /* สีเหลือง/ทอง */
+    --bg-color: #f3f4f6;            /* สีพื้นหลัง */
+    --text-font: 'Kanit', sans-serif;
+}
+
+/* --- การตั้งค่าพื้นฐาน (แก้ไขจุดที่ทำให้ไอคอนหาย) --- */
+/* เดิม: * { font-family: var(--text-font) !important; }  <-- ตัวปัญหา */
+
+/* ใหม่: กำหนดฟอนต์เฉพาะ Text Element หลักๆ ปล่อยให้ Icon ใช้ฟอนต์ของตัวเอง */
+body, button, input, select, textarea, h1, h2, h3, h4, h5, h6, p, span, div, a { 
+    font-family: var(--text-font); 
+}
+
+/* บังคับให้ไอคอนใช้ฟอนต์ FontAwesome เสมอ (กันเหนียว) */
+.fa, .fas, .far, .fab, .fa-solid, .fa-regular, .fa-brands {
+    font-family: "Font Awesome 6 Free", "Font Awesome 6 Brands" !important;
+}
+
+body { background-color: var(--bg-color); color: #1f2937; margin: 0; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
+
+/* --- สีธีม (เรียกใช้ผ่าน class ใน HTML) --- */
+.bg-theme { background-color: var(--primary-color); }
+.text-theme { color: var(--primary-color); }
+.border-theme { border-color: var(--primary-color); }
+.hover-bg-theme:hover { background-color: var(--primary-hover); }
+
+/* --- Animation สินค้าวิ่ง --- */
+.animate-infinite-scroll { display: flex; width: max-content; animation: scroll-left 40s linear infinite; }
+@keyframes scroll-left { 0% { transform: translateX(0); } 100% { transform: translateX(-50%); } }
+
+/* --- Modal Animation --- */
+.modal-scale-in { animation: scaleIn 0.2s ease-out forwards; }
+@keyframes scaleIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+
+/* --- จุดแจ้งเตือน --- */
+.notification-dot {
+    position: absolute; top: 5px; right: 5px;
+    width: 8px; height: 8px;
+    background-color: var(--secondary-color);
+    border-radius: 50%; border: 1px solid var(--primary-color);
+    display: none;
+}
+.notification-dot.active { display: block; }
+
+/* --- Level Card --- */
+.level-card { border: 2px solid transparent; transition: all 0.2s; }
+.level-card.selected { border-color: var(--primary-color); background-color: #fff1f2; }
+
+/* --- Status Colors --- */
+.st-pending { color: #f59e0b; }
+.st-approved { color: #10b981; }
+.st-rejected { color: #ef4444; }
