@@ -55,3 +55,13 @@ body { background-color: var(--bg-color); color: #1f2937; margin: 0; }
 .st-pending { color: #f59e0b; }
 .st-approved { color: #10b981; }
 .st-rejected { color: #ef4444; }
+body {
+    padding-bottom: 90px !important; /* เผื่อที่ให้เมนู */
+}
+
+/* ดันเมนูขึ้นหนีขอบจอมือถือ */
+nav {
+    padding-bottom: env(safe-area-inset-bottom) !important;
+    height: auto !important;
+    min-height: 4rem; /* 64px */
+}
