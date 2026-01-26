@@ -262,19 +262,75 @@ function injectUniversalModals() {
     
     <div id="about-us" class="fixed inset-0 z-[150] bg-[#f3f4f6] hidden flex-col w-full h-full font-sans max-w-xl mx-auto left-0 right-0"><div class="bg-[#DC2626] text-white h-14 flex items-center px-4 shadow-md shrink-0 sticky top-0 z-50 justify-between"><button onclick="toggleAboutUs()" class="hover:bg-white/20 rounded-full w-8 h-8 flex items-center justify-center transition"><i class="fa-solid fa-chevron-left text-lg"></i></button><h1 class="text-lg font-bold">เกี่ยวกับเรา</h1><div class="w-8"></div></div><div class="flex-1 overflow-y-auto p-4 custom-scroll pb-20"><div class="bg-white rounded-xl shadow-sm p-5 mb-6">
     <div class="text-right text-xs text-gray-400 mb-4">About Us</div>
-    <p class="leading-relaxed">At CSP, we partner with consumer businesses around the world to identify, assess and select the best talent for your executive leadership roles...</p>      
-    <div class="space-y-2 pl-2">                       
-        <p>We are global consumer industry experts, with over fifty years of experience...</p>
-    </div>
+                    
+                    <p class="leading-relaxed">
+                        At CSP, we partner with consumer businesses around the world to identify, assess and select the best talent for your executive leadership roles.
+We work actively in all areas of a business, from product and marketing to sales, finance, HR and IT
+                    </p>      
+                    <div class="space-y-2 pl-2">                       
+                        <p>We are global consumer industry experts, with over fifty years of experience both as a consultant and as a client.
+Recent projects and assignments completed by our Directors include:</p>
+                        <p>Head of Procurement - Global Cosmetics Business, UK</p>
+                        <p>Director of Supply Chain EMEA - Global Personal Care Business, Geneva</p>
+                        <p>Completed eCommerce Transformation Project - International Consumer Brand, UK</p>
+                        <p>Director of Distribution Center - International Retailer - North Carolina, USA</p>
+                        <p>VP of HR Supply Chain - Global Beauty Business, Paris</p>
+                        <p>Market Map - Senior CFO Map - Consumer Goods Business, Germany</p>
+                        <p>Senior Brand Director - Food & Agribusiness, Netherlands</p>
+                        <p>How we do it</p>
+                        <p>Five core values underpin everything we do.</p>
+						
+						 <p>First and foremost, we are experts in our chosen sector and ensure that we remain at the forefront of industry change and trends.</p>
+                        <p>We work with clients believing that working with clients rather than representing them will consistently produce the right results.</p>
+                        <p>We are agile, fully aware of and understanding the business needs that drive demand, and offer flexible and rapid solutions.</p>
+                        <p>We are 100% dedicated to successful results and pride ourselves on our ability to deliver on time and repeatedly.</p>
+                        <p>Above all, we are committed to delivering services that set us apart and build long-term, mutually beneficial relationships.</p>
+                        <p>What We Do</p>
+                        <p>Consumer Search Partners specializes in identifying and attracting the industry's top talent who can drive performance across the global consumer industry. Our expertise is built on our experience and understanding of industry trends and
+						shifts.</p>
+						<p>Trends and Markets CSPs partner with companies in the consumer sector, constantly seeking to identify trends and capitalize on growth in emerging markets. They also seek to acquire or partner with companies to reach consumers.
+						Innovation CSPs partner with consumer companies through their innovation as a strategy for growth. Many of these companies use agile workflows to guide the development of new ideas, as opposed to the more structured and time-consuming traditional testing approach. Today's consumer goods businesses are innovating heavily through venture capital and consumer partnerships, while maintaining a focus on health and wellness products.
+						M&A CSP partners with companies in the consumer goods industry looking to expand across geographies and reach markets that can drive both sales and profits.
+						Digital Transformation CSP partners with companies in the consumer goods industry that are creatively and effectively deploying technology to enhance customer engagement and influence the consumer journey.
+						Change is an ever-present part of business. In just a few years, we have moved from e-commerce to multi-channel and centralized commerce, creating new technologies, disciplines and expertise. But what has remained constant is the
+						need for top talent in a rapidly changing landscape.</p>
+                    </div>
+
+                   
+                </div>
     </div></div></div>
 
     <div id="modal-news" class="fixed inset-0 z-[150] bg-[#f3f4f6] hidden flex-col w-full h-full font-sans max-w-xl mx-auto left-0 right-0"><div class="bg-[#DC2626] text-white h-14 flex items-center px-4 shadow-md shrink-0 sticky top-0 z-50 justify-between"><button onclick="toggleNewsModal()" class="hover:bg-white/20 rounded-full w-8 h-8 flex items-center justify-center transition"><i class="fa-solid fa-chevron-left text-lg"></i></button><h1 class="text-lg font-bold">ข่าวสาร</h1><div class="w-8"></div></div><div class="flex-1 overflow-y-auto p-4 custom-scroll pb-20"><div class="bg-white rounded-xl shadow-sm p-5 mb-6">
     <div class="text-right text-xs text-gray-400 mb-4">2023-11-04 18:54:28</div>
-    <p class="leading-relaxed">เนื่องในโอกาสฉลองครบรอบ 24 ปี...</p>
-    <div class="space-y-2 pl-2">
-        <p>เติมเงิน 5,000 บาท, รับโบนัส 666 บาท</p>
-        <p>เติมเงิน 10,000 บาท, รับโบนัส 1,688 บาท</p>
-    </div>
+    <p class="leading-relaxed">
+                        เนื่องในโอกาสฉลองครบรอบ 24 ปี CONSUMER PARTNER ได้เปิดตัวกิจกรรมดังต่อไปนี้เพื่อขอบคุณผู้ใช้ใหม่และผู้ใช้เก่าที่ให้การสนับสนุน CONSUMER PARTNER ของเราเป็นอย่างดี
+                    </p>
+                    
+                    <p class="font-bold text-gray-800">กิจกรรมมีดั่งนี้ :</p>
+                    
+                    <div class="space-y-2 pl-2">
+                        <p>เติมเงิน 5,000 บาท, รับโบนัส 666 บาท</p>
+                        <p>เติมเงิน 10,000 บาท, รับโบนัส 1,688 บาท</p>
+                        <p>เติมเงิน 50,000 บาท, รับโบนัส 8,888 บาท</p>
+                        <p>เติมเงิน 100,000 บาท, รับโบนัส 18,888 บาท</p>
+                        <p>เติมเงิน 200,000 บาท, รับโบนัส 28,888 บาท</p>
+                        <p>เติมเงิน 300,000 บาท, รับโบนัส 38,888 บาท</p>
+                        <p>เติมเงิน 500,000 บาท, รับโบนัส 58,888 บาท</p>
+                        <p>เติมเงิน 1,000,000 บาท, รับโบนัส 88,888 บาท</p>
+                        <p>เติมเงิน 3,000,000 บาท, รับโบนัส 188,888 บาท</p>
+                        <p>เติมเงิน 5,000,000 บาท, รับโบนัส 388,888 บาท</p>
+                        <p>เติมเงิน 10,000,000 บาท, รับโบนัส 588,888 บาท</p>
+                    </div>
+
+                    <p class="leading-relaxed pt-2">
+                        หรือรางวัลมากกว่านี้สามารถติดต่อฝ่ายบริการลูกค้าร่วงหน้าเพื่อสอบถามเพิ่มเติม!
+                    </p>
+                    
+                    <p class="pt-4 text-center font-semibold text-[#902A4F]">
+                        พวกเราทีมงาน CONSUMER PARTNER ขออวยพรให้ทุกท่านมีความสุข！
+                    </p>
+
+                    <div class="text-center text-xs text-gray-400 mt-8">โหลดเสร็จสมบูรณ์</div>
     </div></div></div>
     `;
 }
