@@ -2,198 +2,218 @@
 <html lang="th">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Homepage</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login - Consumer</title>
     <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
-    
-    <link rel="stylesheet" href="style.css">
     
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
     
-    <script src="firebase_config.js"></script>
-
     <style>
-        /* Animation เลื่อนซ้ายวนลูป */
-        @keyframes scroll-left {
-            0% { transform: translateX(0); }
-            100% { transform: translateX(-50%); }
+        * { font-family: 'Kanit', sans-serif; }
+        body { background-color: #f3f4f6; }
+        .red-header {
+            background: linear-gradient(135deg, #d00000 0%, #ff0000 100%);
+            height: 280px;
+            border-bottom-left-radius: 40px;
+            border-bottom-right-radius: 40px;
+            position: relative;
+            overflow: hidden;
         }
+        .red-header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -20%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
+            transform: rotate(30deg);
+        }
+        .input-group {
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 5px;
+            transition: 0.3s;
+        }
+        .input-group:focus-within {
+            border-bottom: 1px solid #d00000;
+        }
+        input:focus, select:focus { outline: none; }
         
-        .infinite-scroll-track {
-            display: flex;
-            gap: 0.75rem; 
-            width: max-content;
-            animation: scroll-left 30s linear infinite;
+        /* Animation สำหรับ Modal */
+        @keyframes popIn {
+            0% { opacity: 0; transform: scale(0.9); }
+            100% { opacity: 1; transform: scale(1); }
         }
-        /* แตะแล้วหยุดเลื่อน */
-        .infinite-scroll-track:active { animation-play-state: paused; }
+        .modal-animate { animation: popIn 0.2s ease-out forwards; }
     </style>
 </head>
-<body class="flex justify-center h-screen w-screen overflow-hidden text-gray-800 bg-gray-100">
-    
-    <div class="w-full max-w-xl bg-white shadow-2xl relative flex flex-col h-full">
-        
-        <header class="bg-[#DC2626] text-white h-14 flex items-center justify-between px-4 shadow-md shrink-0 z-50">
-            <div class="w-8"></div> 
-            <div class="font-bold text-lg">homepage</div>
-            <div class="flex items-center gap-2">
-                <button onclick="toggleNewsModal()" class="hover:bg-white/20 p-2 rounded-full transition">
-                    <i class="fa-solid fa-circle-info text-xl"></i>
-                </button>
-                <button onclick="toggleFloatingNotif()" class="hover:bg-white/20 p-2 rounded-full relative transition">
-                    <i class="fa-regular fa-bell text-xl"></i>
-                    <div class="notif-dot-badge absolute top-2 right-2 w-2 h-2 bg-yellow-400 rounded-full hidden"></div>
-                </button>
+<body class="flex justify-center min-h-screen">
+
+    <div class="w-full max-w-md bg-white shadow-2xl relative flex flex-col min-h-screen">
+        <div class="red-header w-full flex flex-col pt-10 px-6">
+            <div class="flex justify-between items-center text-white mb-8">
+                <i class="fa-solid fa-arrow-left text-xl cursor-pointer" onclick="history.back()"></i>
+                <i class="fa-solid fa-globe text-xl cursor-pointer"></i>
             </div>
-        </header>
-
-        <div class="flex-1 overflow-y-auto p-4 space-y-5 pb-4 scroll-smooth bg-gray-50">
-            
-            <div>
-                <h2 class="text-gray-800 font-bold text-lg">Daily Tasks</h2>
-                <p class="text-gray-400 text-xs mb-3">Higher Commission for Urgent Tasks</p>
-                
-                <div class="w-full overflow-hidden"> 
-                    <div id="scrolling-products" class="infinite-scroll-track">
-                        <div class="p-4 text-xs text-gray-400 w-full text-center bg-gray-50 rounded-lg">กำลังโหลดสินค้า...</div>
-                    </div>
-                </div>
-
-                <button id="start-work-btn" onclick="startGrabbing()" class="w-full bg-[#DC2626] text-white py-3.5 rounded-full font-bold text-base shadow-lg hover:bg-[#b91c1c] active:scale-95 transition mt-4">
-                    start grabbing orders
-                </button>
-            </div>
-
-            <div class="bg-gradient-to-r from-[#FF512F] to-[#F09819] rounded-xl p-4 text-white shadow-md relative overflow-hidden">
-                <div class="relative z-10">
-                    <h3 class="font-bold text-sm mb-1">Membership Benefits</h3>
-                    <p class="text-[10px] font-medium mb-3 leading-tight opacity-90">HIGHER MEMBERSHIP LEVELS, TAKING<br>ON MORE TASKS TO ENJOY MORE EARNINGS.</p>
-                    
-                    <button onclick="window.location.href='index_user/service.html'" class="bg-white text-[#FF512F] text-[10px] font-bold px-3 py-1.5 rounded-full shadow-sm">Upgrade Now</button>
-                </div>
-                <div class="absolute -right-4 -bottom-8 w-24 h-24 bg-white/20 rounded-full blur-xl"></div>
-            </div>
-
-            <div>
-                <h2 class="text-gray-800 font-bold text-lg">Partner Brands</h2>
-                <p class="text-gray-400 text-xs mb-3">Brand Partners</p>
-                <div class="grid grid-cols-3 gap-2">
-                    <div class="bg-white border border-gray-100 rounded-lg h-12 flex items-center justify-center shadow-sm p-2">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/4d/Lazada_%282019%29.svg/1024px-Lazada_%282019%29.svg.png" alt="Lazada" class="h-full w-full object-contain">
-                    </div>
-                    <div class="bg-white border border-gray-100 rounded-lg h-12 flex items-center justify-center shadow-sm p-2">
-                        <img src="https://logonoid.com/images/marks-and-spencer-logo.png" alt="Marks & Spencer" class="h-full w-full object-contain">
-                    </div>
-                    <div class="bg-white border border-gray-100 rounded-lg h-12 flex items-center justify-center shadow-sm p-2">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/1/1b/EBay_logo.svg/2560px-EBay_logo.svg.png" alt="eBay" class="h-full w-full object-contain">
-                    </div>
-
-                    <div class="bg-white border border-gray-100 rounded-lg h-12 flex items-center justify-center shadow-sm p-2">
-                        <img src="https://mms.businesswire.com/media/20210322005442/en/866099/5/HB_Stripes_EN_%284%29_highres.jpg?download=1" alt="Hudson's Bay" class="h-full w-full object-contain">
-                    </div>
-                    <div class="bg-white border border-gray-100 rounded-lg h-12 flex items-center justify-center shadow-sm p-2">
-                        <img src="https://brandlogos.net/wp-content/uploads/2021/10/Alibaba.com-logo-1.png" alt="Alibaba" class="h-full w-full object-contain">
-                    </div>
-                    <div class="bg-white border border-gray-100 rounded-lg h-12 flex items-center justify-center shadow-sm p-2">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/8/8b/Brookfield_Asset_Management_logo.svg/1280px-Brookfield_Asset_Management_logo.svg.png" alt="Brookfield" class="h-full w-full object-contain">
-                    </div>
-
-                    <div class="bg-white border border-gray-100 rounded-lg h-12 flex items-center justify-center shadow-sm p-2">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/b/b1/Walmart_logo_%282008%29.svg" alt="Walmart" class="h-full w-full object-contain">
-                    </div>
-                    <div class="bg-white border border-gray-100 rounded-lg h-12 flex items-center justify-center shadow-sm p-2">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/4/4c/Rakuten_Global_Brand_Logo.svg/960px-Rakuten_Global_Brand_Logo.svg.png" alt="Rakuten" class="h-full w-full object-contain">
-                    </div>
-                    <div class="bg-white border border-gray-100 rounded-lg h-12 flex items-center justify-center shadow-sm p-2">
-                        <img src="https://www.dreamplaza.com.pa/wp-content/uploads/2025/03/logo-Dream-extragrande.png" alt="Dream Plaza" class="h-full w-full object-contain">
-                    </div>
-
-                    <div class="bg-white border border-gray-100 rounded-lg h-12 flex items-center justify-center shadow-sm p-2">
-                        <img src="https://new-backoffice.tarad.com/assets/images/logo_tarad.png" alt="TARAD.com" class="h-full w-full object-contain">
-                    </div>
-                    <div class="bg-white border border-gray-100 rounded-lg h-12 flex items-center justify-center shadow-sm p-2">
-                        <img src="https://upload.wikimedia.org/wikipedia/commons/thumb/a/a9/Amazon_logo.svg/2560px-Amazon_logo.svg.png" alt="Amazon" class="h-full w-full object-contain">
-                    </div>
-                    <div class="bg-white border border-gray-100 rounded-lg h-12 flex items-center justify-center shadow-sm p-2">
-                        <img src="https://www.red-dot.org/fileadmin/_processed_/5/f/csm_07-DP06104-2023BC_Lotte_Mart_ffbaaf7343.png" alt="Lotte Mart" class="h-full w-full object-contain">
-                    </div>
-                </div>
-            </div>
-            
-            <div>
-                <h2 class="text-gray-800 font-bold text-lg">Service Center</h2>
-                <p class="text-gray-400 text-xs mb-3">For further inquiries, please contact our Customer Service Center</p>
-                
-                <div class="space-y-2">
-                    <button onclick="showInviteModal()" class="w-full bg-white border border-gray-100 rounded-lg h-12 px-4 flex justify-between items-center shadow-sm active:bg-gray-50 transition">
-                        <span class="text-gray-700 text-sm">invite friends</span>
-                        <i class="fa-solid fa-chevron-right text-gray-400 text-xs"></i>
-                    </button>
-
-                    <button onclick="toggleAboutUs()" class="w-full bg-white border border-gray-100 rounded-lg h-12 px-4 flex justify-between items-center shadow-sm active:bg-gray-50 transition">
-                        <span class="text-gray-700 text-sm uppercase">COMPANY QUALIFICATION</span>
-                        <i class="fa-solid fa-chevron-right text-gray-400 text-xs"></i>
-                    </button>
-                </div>
-            </div>
-
-            <div class="h-6"></div>
+            <h1 class="text-white text-3xl font-bold ml-2">login</h1>
         </div>
 
-        <div id="bottom-nav" class="shrink-0 z-50 relative"></div>
-        <div id="modal-container"></div> 
+        <div class="px-6 -mt-24 relative z-10 flex-1">
+            <div class="bg-white rounded-2xl shadow-lg p-8 space-y-6">
+                <div>
+                    <label class="block text-sm text-gray-700 mb-2 font-medium">Mobile number*</label>
+                    <div class="flex items-center input-group pb-2">
+                        <div class="relative mr-2">
+                            <select id="country-code" class="bg-transparent text-sm font-bold text-gray-700 cursor-pointer appearance-none pr-4 focus:outline-none">
+                                <option value="+66">TH +66</option>
+                                <option value="+856">LA +856</option>
+                                <option value="+95">MM +95</option>
+                                <option value="+84">VN +84</option>
+                                <option value="+855">KH +855</option>
+                                <option value="+60">MY +60</option>
+                                <option value="+99">TEST +99</option>
+                            </select>
+                            <i class="fa-solid fa-chevron-down text-[10px] text-gray-400 absolute right-0 top-1.5 pointer-events-none"></i>
+                        </div>
+                        <div class="w-[1px] h-5 bg-gray-300 mx-2"></div>
+                        <input type="tel" id="phone" class="flex-1 bg-transparent px-2 text-gray-800 text-sm font-medium" placeholder="ระบุเบอร์โทรศัพท์">
+                    </div>
+                </div>
+
+                <div class="pt-2">
+                    <label class="block text-sm text-gray-700 mb-2 font-medium">Login password*</label>
+                    <div class="input-group pb-2">
+                        <input type="password" id="password" class="w-full bg-transparent px-2 text-gray-800 tracking-widest text-sm" placeholder="••••••">
+                    </div>
+                </div>
+
+                <button onclick="handleLogin()" class="w-full bg-[#e60000] text-white py-3.5 rounded-lg font-bold text-lg shadow-md hover:bg-[#cc0000] active:scale-95 transition mt-4">
+                    login
+                </button>
+
+                <a href="register.html" class="block w-full">
+                    <button class="w-full bg-white border border-gray-200 text-gray-500 py-3.5 rounded-lg font-medium hover:bg-gray-50 transition text-sm">
+                        to register
+                    </button>
+                </a>
+            </div>
+        </div>
+
+        <div class="py-8 flex justify-center pb-12">
+            <div class="w-12 h-12 bg-gray-800 rounded-full flex items-center justify-center border-4 border-gray-200 shadow-md cursor-pointer hover:scale-110 transition">
+                <i class="fa-solid fa-headset text-white text-lg"></i>
+            </div>
+        </div>
     </div>
 
-    <script src="app.js"></script>
-    
+    <div id="custom-modal" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 backdrop-blur-sm">
+        <div class="bg-white rounded-2xl w-72 p-6 text-center shadow-2xl modal-animate relative">
+            <div id="modal-icon" class="mb-4 text-4xl"></div>
+            <h3 id="modal-title" class="text-lg font-bold text-gray-800 mb-2"></h3>
+            <p id="modal-msg" class="text-sm text-gray-500 mb-6"></p>
+            <button onclick="closeModal()" class="w-full bg-[#d00000] text-white py-2.5 rounded-xl font-bold shadow hover:bg-[#b00000] transition">
+                ตกลง
+            </button>
+        </div>
+    </div>
+
+    <script src="firebase_config.js"></script>
+
     <script>
-        function fetchScrollingProducts() {
-            if (!window.db) return setTimeout(fetchScrollingProducts, 1000);
-            const container = document.getElementById('scrolling-products');
-            
-            window.db.collection("products").limit(10).get().then((snap) => {
-                let itemsHtml = '';
-                snap.forEach(doc => {
-                    const p = doc.data();
-                    let imgTag = p.image && p.image.startsWith('http') 
-                        ? `<img src="${p.image}" class="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110">`
-                        : `<i class="fa-solid fa-box-open text-3xl text-gray-300"></i>`;
-                    
-                    itemsHtml += `
-                    <div class="w-[140px] h-[200px] shrink-0 bg-white rounded-xl border border-gray-200 p-2 flex flex-col shadow-sm group relative overflow-hidden">
-                        
-                        <div class="w-full h-28 bg-gray-50 rounded-lg mb-2 overflow-hidden flex items-center justify-center border border-gray-100 shrink-0">
-                            ${imgTag}
-                        </div>
-                        
-                        <div class="flex-1 flex flex-col justify-between min-h-0">
-                            
-                            <div class="text-[10px] text-gray-700 leading-snug" 
-                                 style="display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">
-                                ${p.name || 'สินค้า'}
-                            </div>
-
-                            <div class="text-sm font-bold text-[#DC2626] mt-1">
-                                ฿${parseFloat(p.price || 0).toLocaleString()}
-                            </div>
-                        </div>
-                    </div>`;
-                });
-
-                if(itemsHtml) {
-                    container.innerHTML = itemsHtml + itemsHtml; 
-                } else {
-                    container.innerHTML = '<div class="w-full text-center text-xs p-4">ไม่มีสินค้า</div>';
-                    container.style.animation = 'none';
-                }
-            });
+        if (localStorage.getItem('currentUser')) {
+            window.location.href = 'index.html';
         }
-        fetchScrollingProducts();
+
+        // ✅ ฟังก์ชันแสดง Modal แทน alert
+        let onModalClose = null; // ตัวแปรเก็บคำสั่งที่ทำหลังกดปิด
+
+        function showModal(title, msg, isSuccess = false, callback = null) {
+            const modal = document.getElementById('custom-modal');
+            const iconEl = document.getElementById('modal-icon');
+            const titleEl = document.getElementById('modal-title');
+            const msgEl = document.getElementById('modal-msg');
+
+            titleEl.innerText = title;
+            msgEl.innerText = msg;
+            onModalClose = callback;
+
+            if (isSuccess) {
+                iconEl.innerHTML = '<i class="fa-solid fa-circle-check text-green-500"></i>';
+            } else {
+                iconEl.innerHTML = '<i class="fa-solid fa-circle-exclamation text-red-500"></i>';
+            }
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeModal() {
+            document.getElementById('custom-modal').classList.add('hidden');
+            document.getElementById('custom-modal').classList.remove('flex');
+            if (onModalClose) {
+                onModalClose();
+                onModalClose = null;
+            }
+        }
+
+        // ✅ แก้ไข handleLogin ให้ใช้ showModal แทน alert
+        async function handleLogin() {
+            const countryCode = document.getElementById('country-code').value;
+            let phoneInput = document.getElementById('phone').value.trim();
+            const passwordInput = document.getElementById('password').value.trim();
+
+            if (!phoneInput || !passwordInput) {
+                showModal("แจ้งเตือน", "กรุณากรอกข้อมูลให้ครบถ้วน");
+                return;
+            }
+
+            if (phoneInput.startsWith('0')) {
+                phoneInput = phoneInput.substring(1);
+            }
+
+            const phoneWithSpace = `${countryCode} ${phoneInput}`;
+            const phoneNoSpace = `${countryCode}${phoneInput}`;
+
+            if (!window.db) { showModal("แจ้งเตือน", "ระบบกำลังเชื่อมต่อ... กรุณารอสักครู่"); return; }
+
+            try {
+                let snapshot = await window.db.collection("users").where("phone", "==", phoneWithSpace).where("password", "==", passwordInput).get();
+
+                if (snapshot.empty) {
+                    snapshot = await window.db.collection("users").where("phone", "==", phoneNoSpace).where("password", "==", passwordInput).get();
+                }
+
+                if (snapshot.empty) {
+                    const rawInput = document.getElementById('phone').value.trim();
+                    snapshot = await window.db.collection("users").where("username", "==", rawInput).where("password", "==", passwordInput).get();
+                }
+
+                if (!snapshot.empty) {
+                    const doc = snapshot.docs[0];
+                    const userData = { 
+                        docId: doc.id,
+                        ...doc.data()
+                    };
+                    
+                    localStorage.setItem('currentUser', JSON.stringify(userData));
+                    
+                    // ✅ ใช้ Modal แจ้งเตือนความสำเร็จ แล้วค่อยเปลี่ยนหน้า
+                    showModal("สำเร็จ", `ยินดีต้อนรับ ${userData.username}`, true, () => {
+                        window.location.href = 'index.html';
+                    });
+
+                } else {
+                    showModal("ผิดพลาด", "เบอร์โทรศัพท์ หรือ รหัสผ่าน ไม่ถูกต้อง");
+                }
+
+            } catch (error) {
+                console.error("Login Error:", error);
+                showModal("ข้อผิดพลาด", error.message);
+            }
+        }
     </script>
 </body>
-
 </html>
-
