@@ -1,6 +1,14 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
+    <script>
+    // --- ระบบป้องกันการเข้าถึง (Security Check) ---
+    // ถ้าในเครื่องไม่มีข้อมูลว่า 'admin_logged_in' เป็น 'true'
+    if (localStorage.getItem('admin_logged_in') !== 'true') {
+        // ให้ดีดกลับไปที่หน้า Login ทันที (ถอยโฟลเดอร์ออกมา 1 ขั้น แล้วเข้า admin_login)
+        window.location.href = '../admin_login/index.html';
+    }
+</script>
     <meta charset="UTF-8">
     <title>Admin - สถิติห้างสรรพสินค้า</title>
     <link rel="stylesheet" href="admin_style.css">
@@ -73,12 +81,12 @@
                     </div>
 
                     <div class="bg-[#FFB300] text-white p-4 rounded shadow stat-card relative overflow-hidden">
-                        <i class="fa-solid fa-bolt absolute right-2 top-2 text-5xl opacity-20"></i>
-                        <h3 class="text-xs font-bold opacity-90">จำนวนคนที่ชาร์จแบตเตอรี่</h3>
-                        <div class="text-3xl font-bold my-2">0</div>
-                        <p class="text-[10px] opacity-80">วันนี้มีคน 0 คนได้รับการชาร์จพลังงาน</p>
-                        <p class="text-[10px] opacity-70">เมื่อวานนี้มีคน 0 คนได้รับการบริการ</p>
-                    </div>
+    <i class="fa-solid fa-users absolute right-2 top-2 text-5xl opacity-20"></i>
+    <h3 class="text-xs font-bold opacity-90">จำนวนคนเติมเงิน</h3>
+    <div class="text-3xl font-bold my-2" id="stat-deposit-users-total">0</div>
+    <p class="text-[10px] opacity-80">วันนี้มีคนเติมเงิน <span id="stat-deposit-users-today">0</span> คน</p>
+    <p class="text-[10px] opacity-70">เมื่อวานนี้มีคนเติมเงิน <span id="stat-deposit-users-yesterday">0</span> คน</p>
+</div>
 
                     <div class="bg-[#F57C00] text-white p-4 rounded shadow stat-card relative overflow-hidden">
                         <i class="fa-solid fa-dollar-sign absolute right-2 top-2 text-5xl opacity-20"></i>
@@ -224,24 +232,57 @@
             });
 
             // 4. Recharges (Deposit)
-            db.collection("recharges").onSnapshot(snap => {
-                let totalDeposit = 0;
-                let depositToday = 0;
+            // 4. Recharges (Deposit & People Count)
+db.collection("recharges").onSnapshot(snap => {
+    let totalDeposit = 0;
+    let depositToday = 0;
+    
+    // สร้างตัวเก็บรายชื่อคน (Set จะช่วยตัดชื่อซ้ำออกให้อัตโนมัติ)
+    let allDepositUsers = new Set();
+    let todayDepositUsers = new Set();
+    let yesterdayDepositUsers = new Set();
 
-                snap.forEach(doc => {
-                    const data = doc.data();
-                    const amount = parseFloat(data.amount) || 0;
-                    const isToday = data.timestamp && data.timestamp.includes(todayISO);
+    // หาวันที่ของเมื่อวาน (Yesterday)
+    const yesterdayDate = new Date(today);
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    // แปลงเป็นรูปแบบ YYYY-MM-DD เพื่อเทียบกับ Timestamp
+    const yesterdayISO = yesterdayDate.toISOString().split('T')[0]; 
 
-                    if (data.status === 'approved') {
-                        totalDeposit += amount;
-                        if(isToday) depositToday += amount;
-                    }
-                });
+    snap.forEach(doc => {
+        const data = doc.data();
+        const amount = parseFloat(data.amount) || 0;
+        
+        // ตรวจสอบสถานะต้องสำเร็จเท่านั้น
+        if (data.status === 'approved') {
+            // 1. คำนวณยอดเงิน (เดิม)
+            totalDeposit += amount;
+            if (data.timestamp && data.timestamp.includes(todayISO)) {
+                depositToday += amount;
+            }
 
-                document.getElementById("stat-deposit-total").innerText = '฿' + totalDeposit.toLocaleString(undefined, {minimumFractionDigits: 2});
-                document.getElementById("stat-deposit-today").innerText = '฿' + depositToday.toLocaleString(undefined, {minimumFractionDigits: 2});
-            });
+            // 2. คำนวณจำนวนคน (ใหม่) - เช็คจาก user_id
+            if (data.user_id) {
+                allDepositUsers.add(data.user_id); // เก็บคนทั้งหมด
+
+                if (data.timestamp && data.timestamp.includes(todayISO)) {
+                    todayDepositUsers.add(data.user_id); // เก็บคนเติมวันนี้
+                }
+                if (data.timestamp && data.timestamp.includes(yesterdayISO)) {
+                    yesterdayDepositUsers.add(data.user_id); // เก็บคนเติมเมื่อวาน
+                }
+            }
+        }
+    });
+
+    // แสดงผลยอดเงิน
+    document.getElementById("stat-deposit-total").innerText = '฿' + totalDeposit.toLocaleString(undefined, {minimumFractionDigits: 2});
+    document.getElementById("stat-deposit-today").innerText = '฿' + depositToday.toLocaleString(undefined, {minimumFractionDigits: 2});
+
+    // แสดงผลจำนวนคน (ใช้ .size เพื่อนับจำนวนใน Set)
+    document.getElementById("stat-deposit-users-total").innerText = allDepositUsers.size.toLocaleString();
+    document.getElementById("stat-deposit-users-today").innerText = todayDepositUsers.size.toLocaleString();
+    document.getElementById("stat-deposit-users-yesterday").innerText = yesterdayDepositUsers.size.toLocaleString();
+});
         }
 
         // เริ่มโหลดข้อมูล
