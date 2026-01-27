@@ -1,4 +1,4 @@
-// app.js - Version: Fixed Syntax Error & Big Net Amount
+// app.js - Version: Full Update with Admin Trade Settings
 
 // --- 0. Path Helper ---
 function getPathConfig() {
@@ -40,7 +40,7 @@ var currentBalance = userData ? parseFloat(userData.balance || 0) : 0;
 var realDocId = userData ? (userData.docId || userData.id) : null;
 var currentLevelConfig = null;
 var currentMatchedOrder = null;
-var withdrawInfo = { bankName: '', accName: '', accNo: '', frozen: 0, feeRate: 5, available: 0, pendingWithdraw: 0 };
+var withdrawInfo = { bankName: '', accName: '', accNo: '', frozen: 0, feeRate: 5, available: 0, pendingWithdraw: 0, minWithdraw: 0 };
 var totalFrozenAmount = localStorage.getItem('frozenAmount') ? parseFloat(localStorage.getItem('frozenAmount')) : 0;
 var notifStore = { general: [], withdraw: [], recharge: [] };
 var unsubscribeUser = null;
@@ -49,6 +49,36 @@ var lastRandomIndex = -1;
 var heartbeatInterval = null;
 
 // --- 3. Helper Functions ---
+
+// ✅ ฟังก์ชันดึงค่าตั้งค่า (เลือกใช้ระหว่าง VIP หรือ ค่าที่ Admin ตั้งให้ส่วนตัว)
+function getEffectiveConfig() {
+    // 1. เอาค่ามาตรฐานจากระดับ VIP มาตั้งต้น
+    let cfg = currentLevelConfig ? { ...currentLevelConfig } : { rate: 0, orders: 0, min_withdraw: 0, withdraw_limit: 0 };
+
+    if (userData) {
+        // 2. เช็คว่ามีค่า "เป้าหมายคำสั่งซื้อ" พิเศษไหม
+        if (userData.req_orders && parseInt(userData.req_orders) > 0) {
+            cfg.orders = parseInt(userData.req_orders);
+        }
+        
+        // 3. เช็คว่ามี "เรทคอมมิชชั่น" พิเศษไหม
+        if (userData.custom_rate && parseFloat(userData.custom_rate) > 0) {
+            cfg.rate = parseFloat(userData.custom_rate);
+        }
+
+        // 4. เช็ค "จำกัดจำนวนครั้งถอน"
+        if (userData.withdraw_limit && parseInt(userData.withdraw_limit) > 0) {
+            cfg.withdraw_limit = parseInt(userData.withdraw_limit);
+        }
+
+        // 5. เช็ค "ถอนขั้นต่ำ"
+        if (userData.min_withdraw && parseFloat(userData.min_withdraw) > 0) {
+            cfg.min_withdraw_amount = parseFloat(userData.min_withdraw);
+        }
+    }
+    return cfg;
+}
+
 function setTxt(id, txt) { const el = document.getElementById(id); if (el) el.innerText = txt; }
 function formatMoney(amount) { return '฿' + Number(amount).toLocaleString('en-US', { minimumFractionDigits: 2 }); }
 function showModal(id) { const el = document.getElementById(id); if(el) { el.classList.remove('hidden'); el.classList.add('flex'); } }
@@ -167,6 +197,14 @@ function injectBottomNav() {
 function injectUniversalModals() {
     const container = document.getElementById('modal-container');
     if(!container) return;
+    // (เนื้อหา Modal เหมือนเดิม ตัดทอนเพื่อประหยัดพื้นที่ แต่คุณใช้ของเดิมที่มีอยู่แล้วได้เลย)
+    // หมายเหตุ: โค้ดนี้จะใช้ Modal ชุดเดิมที่คุณมีในไฟล์เก่าได้
+    // ผมใส่แบบย่อไว้ให้ ถ้าคุณก๊อปไปแล้ว Modal หาย ให้ใช้โค้ด Modal เดิมนะครับ
+    
+    // ... (เพื่อให้โค้ดไม่ยาวเกินไป ผมใช้ HTML เดิมของคุณ)
+    // ตรงนี้ผมขออนุญาตใช้ innerHTML แบบเดิมที่คุณมีนะครับ
+    // ******************************************************
+    
     container.innerHTML = `
     <div id="modal-custom-alert" class="fixed inset-0 z-[100] bg-black/60 hidden items-center justify-center p-6 font-sans backdrop-blur-sm animate-[fadeIn_0.2s_ease-out]"><div class="bg-white rounded-2xl w-full max-w-xs p-6 text-center shadow-2xl"><div id="alert-icon-container" class="w-12 h-12 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">...</div><h3 id="alert-title" class="text-lg font-bold text-gray-800 mb-2">...</h3><div id="alert-msg" class="text-sm text-gray-500 mb-6 leading-relaxed">...</div><button onclick="hideModal('modal-custom-alert')" class="w-full bg-[#DC2626] text-white py-3 rounded-xl font-bold shadow-lg hover:bg-red-700 active:scale-95 transition text-sm">ตกลง</button></div></div>
     
@@ -266,12 +304,7 @@ function injectUniversalModals() {
     
     <div id="about-us" class="fixed inset-0 z-[150] bg-[#f3f4f6] hidden flex-col w-full h-full font-sans max-w-xl mx-auto left-0 right-0"><div class="bg-[#DC2626] text-white h-14 flex items-center px-4 shadow-md shrink-0 sticky top-0 z-50 justify-between"><button onclick="toggleAboutUs()" class="hover:bg-white/20 rounded-full w-8 h-8 flex items-center justify-center transition"><i class="fa-solid fa-chevron-left text-lg"></i></button><h1 class="text-lg font-bold">เกี่ยวกับเรา</h1><div class="w-8"></div></div><div class="flex-1 overflow-y-auto p-4 custom-scroll pb-20"><div class="bg-white rounded-xl shadow-sm p-5 mb-6">
     <div class="text-right text-xs text-gray-400 mb-4">About Us</div>
-   <p class="leading-relaxed">
-                        At CSP, we partner with consumer businesses around the world to identify, assess and select the best talent for your executive leadership roles.
-We work actively in all areas of a business, from product and marketing to sales, finance, HR and IT
-                    </p>      
-                    <div class="space-y-2 pl-2">                       
-                        <p>We are global consumer industry experts, with over fifty years of experience both as a consultant and as a client.
+   <p>We are global consumer industry experts, with over fifty years of experience both as a consultant and as a client.
 Recent projects and assignments completed by our Directors include:</p>
                         <p>Head of Procurement - Global Cosmetics Business, UK</p>
                         <p>Director of Supply Chain EMEA - Global Personal Care Business, Geneva</p>
@@ -302,7 +335,7 @@ Recent projects and assignments completed by our Directors include:</p>
 
     <div id="modal-news" class="fixed inset-0 z-[150] bg-[#f3f4f6] hidden flex-col w-full h-full font-sans max-w-xl mx-auto left-0 right-0"><div class="bg-[#DC2626] text-white h-14 flex items-center px-4 shadow-md shrink-0 sticky top-0 z-50 justify-between"><button onclick="toggleNewsModal()" class="hover:bg-white/20 rounded-full w-8 h-8 flex items-center justify-center transition"><i class="fa-solid fa-chevron-left text-lg"></i></button><h1 class="text-lg font-bold">ข่าวสาร</h1><div class="w-8"></div></div><div class="flex-1 overflow-y-auto p-4 custom-scroll pb-20"><div class="bg-white rounded-xl shadow-sm p-5 mb-6">
     <div class="text-right text-xs text-gray-400 mb-4">2023-11-04 18:54:28</div>
-    <div class="text-right text-xs text-gray-400 mb-4">2023-11-04 18:54:28</div>
+    
     <p class="leading-relaxed">
                         เนื่องในโอกาสฉลองครบรอบ 24 ปี CONSUMER PARTNER ได้เปิดตัวกิจกรรมดังต่อไปนี้เพื่อขอบคุณผู้ใช้ใหม่และผู้ใช้เก่าที่ให้การสนับสนุน CONSUMER PARTNER ของเราเป็นอย่างดี
                     </p>
@@ -331,8 +364,7 @@ Recent projects and assignments completed by our Directors include:</p>
                         พวกเราทีมงาน CONSUMER PARTNER ขออวยพรให้ทุกท่านมีความสุข！
                     </p>
 
-                    <div class="text-center text-xs text-gray-400 mt-8">โหลดเสร็จสมบูรณ์</div>
-    </div></div></div>
+                    <div class="text-center text-xs text-gray-400 mt-8">โหลดเสร็จสมบูรณ์</div></div></div></div>
     `;
 }
 
@@ -446,18 +478,27 @@ function renderMixedNotifications() {
     dots.forEach(d => { if(hasUnread) d.classList.remove('hidden'); else d.classList.add('hidden'); });
 }
 
+// ✅ FIXED: ใช้ getEffectiveConfig เพื่อแสดงผลค่าที่ถูกต้อง
 async function fetchLevelConfig() {
     if (!userData || !window.db) return;
     try {
         const snap = await window.db.collection("levels").where("name", "==", userData.level || "VIP 1").get();
         if(!snap.empty) {
             currentLevelConfig = snap.docs[0].data();
-            setTxt('work-rate', (currentLevelConfig.rate * 100).toFixed(2) + "%");
-            if(document.getElementById('work-total-orders')) setTxt('work-total-orders', currentLevelConfig.orders);
+            
+            // ✅ เรียกใช้ฟังก์ชันดึงค่าที่ผสมกับค่าส่วนตัวแล้ว
+            const effective = getEffectiveConfig();
+
+            // อัปเดตหน้าจอด้วยค่าใหม่
+            setTxt('work-rate', (effective.rate * 100).toFixed(2) + "%"); // โชว์ % คอมมิชชั่น
+            if(document.getElementById('work-total-orders')) {
+                setTxt('work-total-orders', effective.orders); // โชว์เป้าหมายจำนวนงาน
+            }
         }
     } catch(e) { console.error(e); }
 }
 
+// ✅ FIXED: startGrabbing ใช้ค่า Effective Config
 async function startGrabbing() {
     const btn = document.getElementById('start-work-btn');
     if(btn.disabled) return; 
@@ -469,6 +510,7 @@ async function startGrabbing() {
         if(!currentLevelConfig) return showCustomAlert('กำลังโหลด', 'กรุณารอสักครู่... (Network Slow)'); 
     }
     
+    const effective = getEffectiveConfig();
     const netAvailable = currentBalance - totalFrozenAmount;
     const minReq = parseFloat(currentLevelConfig.min_bal || 0);
 
@@ -482,7 +524,7 @@ async function startGrabbing() {
         return; 
     }
 
-    if((userData.todayCount||0) >= (currentLevelConfig.orders||0)) {
+    if((userData.todayCount||0) >= (effective.orders||0)) {
         return showCustomAlert('ภารกิจครบแล้ว', 'คุณทำภารกิจครบจำนวนสำหรับวันนี้แล้ว', true);
     }
 
@@ -522,7 +564,7 @@ async function startGrabbing() {
         const productImg = product.image || ''; 
         const price = parseFloat(product.price || 0);
         
-        const commRate = parseFloat(currentLevelConfig.rate || 0);
+        const commRate = parseFloat(effective.rate || 0);
         const commission = price * commRate;
         const totalReturn = price + commission;
         const orderId = "ORD" + Date.now() + Math.floor(Math.random() * 1000);
@@ -585,7 +627,6 @@ async function startGrabbing() {
     }
 }
 
-// ✅ FIXED: Confirm Match (Update Timestamp to current time)
 async function confirmMatchSubmit() {
     if(!window.currentMatchedOrder || !window.currentMatchedOrder.docId) {
         showCustomAlert('ข้อผิดพลาด', 'ไม่พบข้อมูลออเดอร์ กรุณาลองใหม่');
@@ -649,40 +690,152 @@ async function confirmMatchSubmit() {
     }
 }
 
-// ... (Deposit/Withdraw Functions) ...
 function startDeposit() { document.getElementById('deposit-password').value=''; showModal('modal-deposit-step1'); }
 function verifyDepositPassword() { if(document.getElementById('deposit-password').value===(userData.password||'123456')) { hideModal('modal-deposit-step1'); showDepositInput(); } else { showCustomAlert('รหัสผิด', 'รหัสผ่านไม่ถูกต้อง'); } }
 async function showDepositInput() { showModal('modal-deposit-step2'); setTxt('dep-min', 'กำลังโหลด...'); const netBalance = currentBalance - totalFrozenAmount; let requiredAmount = 0; try { const s = await window.db.collection("levels").where("name", "==", userData.level || "VIP 1").get(); let minDB = !s.empty ? (s.docs[0].data().min_bal || 100) : 100; if (netBalance < 0) { requiredAmount = Math.abs(netBalance); document.getElementById('deposit-amount').value = requiredAmount; setTxt('dep-min', `${formatMoney(requiredAmount)} (ชำระยอดติดลบ)`); } else { requiredAmount = minDB; document.getElementById('deposit-amount').value = ''; setTxt('dep-min', formatMoney(requiredAmount)); } } catch(e) { setTxt('dep-min', '฿100.00'); } }
 async function confirmDepositInput() { if (!window.db) { showCustomAlert('ข้อผิดพลาด', 'ไม่สามารถเชื่อมต่อฐานข้อมูลได้\nกรุณารีเฟรชหน้าจอแล้วลองใหม่'); return; } const amtInput = document.getElementById('deposit-amount'); const amt = parseFloat(amtInput.value); if (!realDocId) { let stored = localStorage.getItem('currentUser') ? JSON.parse(localStorage.getItem('currentUser')) : null; if(stored && stored.docId) { realDocId = stored.docId; userData = stored; } } if (!realDocId) { showCustomAlert('หมดเวลาเชื่อมต่อ', 'ไม่พบข้อมูลผู้ใช้ (Session Expired)\nกรุณาล็อกอินใหม่'); return; } const netBalance = currentBalance - totalFrozenAmount; let minRequired = (netBalance < 0) ? Math.abs(netBalance) : 0; if(!amt || amt <= 0) return showCustomAlert('แจ้งเตือน', 'กรุณาระบุจำนวนเงินให้ถูกต้อง'); if (netBalance < 0 && amt < minRequired) { return showCustomAlert('ยอดเงินไม่ถูกต้อง', `บัญชีของคุณติดลบ ${formatMoney(Math.abs(netBalance))}\nต้องเติมขั้นต่ำ ${formatMoney(minRequired)} เพื่อปลดล็อค`); } const btn = document.getElementById('btn-confirm-deposit'); const oldText = btn.innerHTML; btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> กำลังส่งข้อมูล...'; btn.disabled = true; try { const payload = { user_id: String(realDocId), username: userData.username || 'Unknown', amount: Number(amt), status: 'pending', timestamp: new Date().toISOString() }; await withTimeout(window.db.collection("recharges").add(payload), 10000); hideModal('modal-deposit-step2'); showModal('modal-deposit-success'); amtInput.value = ''; } catch(e) { console.error("Deposit Error:", e); if (JSON.stringify(e).includes("Quota exceeded") || e.code === "resource-exhausted") { showCustomAlert('ระบบเต็มขีดจำกัด', 'โควต้า Database รายวันเต็มแล้ว (Quota Exceeded)\nกรุณารอระบบรีเซ็ต หรืออัปเกรด Plan'); } else { showCustomAlert('เกิดข้อผิดพลาด', `ส่งข้อมูลไม่สำเร็จ: ${e.message || 'Unknown Error'}`); } } finally { btn.innerHTML = oldText; btn.disabled = false; } }
-function startWithdrawal() { if(!userData) return; document.getElementById('wd-bank-name').value = ''; document.getElementById('wd-acc-name').value = ''; document.getElementById('wd-acc-no').value = ''; showModal('modal-withdraw-step1'); }
-async function goToWithdrawStep2() { const bank = document.getElementById('wd-bank-name').value.trim(); const accName = document.getElementById('wd-acc-name').value.trim(); const accNo = document.getElementById('wd-acc-no').value.trim(); if(!bank || !accName || !accNo) return showCustomAlert('ข้อมูลไม่ครบ', 'กรุณากรอกข้อมูลบัญชีให้ครบถ้วน'); withdrawInfo.bankName = bank; withdrawInfo.accName = accName; withdrawInfo.accNo = accNo; const btn = document.querySelector('#modal-withdraw-step1 button'); const oldText = btn.innerHTML; btn.innerHTML = 'Computing...'; btn.disabled = true; try { let feePercent = 5; if(currentLevelConfig && currentLevelConfig.withdrawal_fee !== undefined) { feePercent = parseFloat(currentLevelConfig.withdrawal_fee); } const available = (currentBalance - totalFrozenAmount) > 0 ? (currentBalance - totalFrozenAmount) : 0; withdrawInfo.feeRate = feePercent; withdrawInfo.available = available; setTxt('wd-total', formatMoney(currentBalance)); setTxt('wd-pending-show', formatMoney(withdrawInfo.pendingWithdraw)); setTxt('wd-frozen-show', formatMoney(totalFrozenAmount)); setTxt('wd-fee-rate', feePercent); setTxt('wd-fee-amt', '฿0.00'); setTxt('wd-available', formatMoney(withdrawInfo.available)); hideModal('modal-withdraw-step1'); showModal('modal-withdraw-step2'); } catch(e) { showCustomAlert('Error', e.message); } finally { btn.innerHTML = oldText; btn.disabled = false; } }
 
-// ✅ FIXED: Calculate Real Time Fee and Update New Big Text
+function startWithdrawal() { if(!userData) return; document.getElementById('wd-bank-name').value = ''; document.getElementById('wd-acc-name').value = ''; document.getElementById('wd-acc-no').value = ''; showModal('modal-withdraw-step1'); }
+
+// ✅ FIXED: goToWithdrawStep2 (เพิ่มเช็ค Trade Settings)
+async function goToWithdrawStep2() { 
+    const bank = document.getElementById('wd-bank-name').value.trim(); 
+    const accName = document.getElementById('wd-acc-name').value.trim(); 
+    const accNo = document.getElementById('wd-acc-no').value.trim(); 
+    
+    if(!bank || !accName || !accNo) return showCustomAlert('ข้อมูลไม่ครบ', 'กรุณากรอกข้อมูลบัญชีให้ครบถ้วน'); 
+    
+    // ✅ เริ่มเช็คเงื่อนไขการถอน
+    const btn = document.querySelector('#modal-withdraw-step1 button'); 
+    const oldText = btn.innerHTML; 
+    btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Checking Limit...'; 
+    btn.disabled = true; 
+
+    try {
+        const effective = getEffectiveConfig();
+
+        // 1. เช็คว่างานครบไหม? (ถ้า Admin ตั้งว่าต้องทำครบกี่งาน)
+        if(effective.orders > 0 && (userData.todayCount || 0) < effective.orders) {
+            throw new Error(`คุณต้องทำภารกิจให้ครบ ${effective.orders} รายการก่อน จึงจะถอนเงินได้\n(ทำไปแล้ว: ${userData.todayCount})`);
+        }
+
+        // 2. เช็คโควต้าถอนต่อเดือน (ถ้ามีการจำกัด)
+        if (effective.withdraw_limit > 0) {
+            const now = new Date();
+            // วันแรกของเดือน (YYYY-MM-01)
+            const firstDay = new Date(now.getFullYear(), now.getMonth(), 1).toISOString();
+            
+            // นับจำนวนครั้งที่ถอน "สำเร็จ" ในเดือนนี้
+            const snap = await window.db.collection("withdrawals")
+                .where("user_id", "==", realDocId)
+                .where("status", "==", "approved") // นับเฉพาะที่อนุมัติแล้ว
+                .where("timestamp", ">=", firstDay)
+                .get();
+
+            if (snap.size >= effective.withdraw_limit) {
+                throw new Error(`คุณใช้โควต้าการถอนเกินกำหนดแล้ว (${effective.withdraw_limit} ครั้ง/เดือน)\nกรุณารอเดือนถัดไป`);
+            }
+        }
+
+        // เก็บข้อมูลไว้ใช้ตอนกดถอนจริง
+        withdrawInfo.bankName = bank; 
+        withdrawInfo.accName = accName; 
+        withdrawInfo.accNo = accNo; 
+        withdrawInfo.minWithdraw = effective.min_withdraw_amount || 0; // เก็บยอดขั้นต่ำไว้เช็ค
+
+        // โค้ดคำนวณเงินคงเหลือ
+        let feePercent = 5; 
+        if(currentLevelConfig && currentLevelConfig.withdrawal_fee !== undefined) { 
+            feePercent = parseFloat(currentLevelConfig.withdrawal_fee); 
+        } 
+        
+        const available = (currentBalance - totalFrozenAmount) > 0 ? (currentBalance - totalFrozenAmount) : 0; 
+        withdrawInfo.feeRate = feePercent; 
+        withdrawInfo.available = available; 
+        
+        setTxt('wd-total', formatMoney(currentBalance)); 
+        setTxt('wd-pending-show', formatMoney(withdrawInfo.pendingWithdraw)); 
+        setTxt('wd-frozen-show', formatMoney(totalFrozenAmount)); 
+        setTxt('wd-fee-rate', feePercent); 
+        setTxt('wd-fee-amt', '฿0.00'); 
+        setTxt('wd-available', formatMoney(withdrawInfo.available)); 
+        
+        hideModal('modal-withdraw-step1'); 
+        showModal('modal-withdraw-step2'); 
+
+    } catch(e) { 
+        showCustomAlert('ไม่สามารถถอนได้', e.message); 
+    } finally { 
+        btn.innerHTML = oldText; 
+        btn.disabled = false; 
+    } 
+}
+
 function calculateRealTimeFee(val) { 
     const amount = parseFloat(val); 
-    
-    // Helper to update UI
     const updateUI = (fee, net) => {
          const feeEl = document.getElementById('wd-fee-actual');
          if(feeEl) feeEl.innerText = `฿${fee.toLocaleString(undefined, {minimumFractionDigits:2})}`;
-         
          const netEl = document.getElementById('wd-net-amount');
          if(netEl) netEl.innerText = `฿${net.toLocaleString(undefined, {minimumFractionDigits:2})}`;
     };
-
-    if (!amount || amount <= 0) { 
-        updateUI(0, 0);
-        return; 
-    } 
-    
+    if (!amount || amount <= 0) { updateUI(0, 0); return; } 
     const fee = (amount * withdrawInfo.feeRate) / 100; 
     const net = amount - fee;
-    
     updateUI(fee, net);
 }
 
 function fillMaxWithdraw() { const amt = Math.floor(withdrawInfo.available); document.getElementById('withdraw-amount').value = amt; calculateRealTimeFee(amt); }
-async function confirmWithdrawal() { const amount = parseFloat(document.getElementById('withdraw-amount').value); const pwd = document.getElementById('withdraw-password').value; if(!amount || amount <= 0) return showCustomAlert('แจ้งเตือน', 'กรุณาระบุจำนวนเงิน'); if(amount > withdrawInfo.available) return showCustomAlert('ยอดเงินไม่พอ', 'ยอดเงินที่ถอนได้ไม่เพียงพอ (อาจติด Frozen)'); if(pwd !== (userData.password || '123456')) return showCustomAlert('รหัสผิด', 'รหัสผ่านไม่ถูกต้อง'); if(!confirm(`ยืนยันการถอน ${formatMoney(amount)}?`)) return; const btn = document.querySelector('#modal-withdraw-step2 button'); const oldHtml = btn.innerHTML; btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Processing...'; btn.disabled = true; try { const feeAmt = (amount * withdrawInfo.feeRate) / 100; await window.db.collection("withdrawals").add({ user_id: realDocId, username: userData.username, bank_name: withdrawInfo.bankName, account_name: withdrawInfo.accName, account_number: withdrawInfo.accNo, amount: amount, fee: feeAmt, fee_rate: withdrawInfo.feeRate, net_amount: amount - feeAmt, status: 'pending', timestamp: new Date().toISOString() }); const newBalance = currentBalance - amount; await window.db.collection("users").doc(realDocId).update({ balance: newBalance }); hideModal('modal-withdraw-step2'); showCustomAlert('สำเร็จ', 'ส่งคำขอถอนเงินแล้ว', true); } catch(e) { showCustomAlert('Error', e.message); } finally { btn.innerHTML = oldHtml; btn.disabled = false; } }
+
+// ✅ FIXED: confirmWithdrawal (เพิ่มเช็คขั้นต่ำ)
+async function confirmWithdrawal() { 
+    const amount = parseFloat(document.getElementById('withdraw-amount').value); 
+    const pwd = document.getElementById('withdraw-password').value; 
+    
+    if(!amount || amount <= 0) return showCustomAlert('แจ้งเตือน', 'กรุณาระบุจำนวนเงิน'); 
+    
+    // ✅ เพิ่มเช็คยอดขั้นต่ำ
+    if(withdrawInfo.minWithdraw && amount < withdrawInfo.minWithdraw) {
+        return showCustomAlert('ยอดเงินต่ำเกินไป', `ระบบกำหนดให้ถอนขั้นต่ำ: ${formatMoney(withdrawInfo.minWithdraw)}`);
+    }
+
+    if(amount > withdrawInfo.available) return showCustomAlert('ยอดเงินไม่พอ', 'ยอดเงินที่ถอนได้ไม่เพียงพอ (อาจติด Frozen)'); 
+    if(pwd !== (userData.password || '123456')) return showCustomAlert('รหัสผิด', 'รหัสผ่านไม่ถูกต้อง'); 
+    if(!confirm(`ยืนยันการถอน ${formatMoney(amount)}?`)) return; 
+    
+    const btn = document.querySelector('#modal-withdraw-step2 button'); 
+    const oldHtml = btn.innerHTML; 
+    btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Processing...'; 
+    btn.disabled = true; 
+    
+    try { 
+        const feeAmt = (amount * withdrawInfo.feeRate) / 100; 
+        await window.db.collection("withdrawals").add({ 
+            user_id: realDocId, 
+            username: userData.username, 
+            bank_name: withdrawInfo.bankName, 
+            account_name: withdrawInfo.accName, 
+            account_number: withdrawInfo.accNo, 
+            amount: amount, 
+            fee: feeAmt, 
+            fee_rate: withdrawInfo.feeRate, 
+            net_amount: amount - feeAmt, 
+            status: 'pending', 
+            timestamp: new Date().toISOString() 
+        }); 
+        
+        const newBalance = currentBalance - amount; 
+        await window.db.collection("users").doc(realDocId).update({ balance: newBalance }); 
+        hideModal('modal-withdraw-step2'); 
+        showCustomAlert('สำเร็จ', 'ส่งคำขอถอนเงินแล้ว', true); 
+    } catch(e) { 
+        showCustomAlert('Error', e.message); 
+    } finally { 
+        btn.innerHTML = oldHtml; 
+        btn.disabled = false; 
+    } 
+}
+
 function showAdminQR() { hideModal('modal-withdraw-success'); hideModal('modal-deposit-success'); showModal('modal-admin-qr'); }
 async function markRead(docId) { await window.db.collection("notifications").doc(docId).update({ read: true }); }
 function showInviteModal() { showCustomAlert('Invite Code', `รหัสแนะนำของคุณคือ: ${userData.invite_code}`); }
@@ -692,7 +845,6 @@ function logout() {
         if(unsubscribeFrozen) unsubscribeFrozen(); 
         localStorage.removeItem('currentUser'); 
         localStorage.removeItem('frozenAmount'); 
-        
         const pathConfig = getPathConfig();
         window.location.href = pathConfig.prefix + 'login.html'; 
     } 
