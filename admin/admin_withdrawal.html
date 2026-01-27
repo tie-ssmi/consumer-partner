@@ -1,6 +1,15 @@
 <!DOCTYPE html>
 <html lang="th">
 <head>
+<script>
+    // --- ระบบป้องกันการเข้าถึง (Security Check) ---
+    // ถ้าในเครื่องไม่มีข้อมูลว่า 'admin_logged_in' เป็น 'true'
+    if (localStorage.getItem('admin_logged_in') !== 'true') {
+        // ให้ดีดกลับไปที่หน้า Login ทันที (ถอยโฟลเดอร์ออกมา 1 ขั้น แล้วเข้า admin_login)
+        window.location.href = '../admin_login/index.html';
+    }
+</script>
+
     <meta charset="UTF-8">
     <title>Admin - การจัดการการถอนเงิน</title>
     <link rel="stylesheet" href="admin_style.css">
