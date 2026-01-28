@@ -1,0 +1,664 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<script>
+    // --- ระบบป้องกันการเข้าถึง (Security Check) ---
+    // ถ้าในเครื่องไม่มีข้อมูลว่า 'admin_logged_in' เป็น 'true'
+    if (localStorage.getItem('admin_logged_in') !== 'true') {
+        // ให้ดีดกลับไปที่หน้า Login ทันที (ถอยโฟลเดอร์ออกมา 1 ขั้น แล้วเข้า admin_login)
+        window.location.href = '../admin_login/index.html';
+    }
+</script>
+
+    <meta charset="UTF-8">
+    <title>Admin - รายชื่อสมาชิก</title>
+    <link rel="stylesheet" href="admin_style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <style>
+        .table-wrapper { overflow-x: auto; white-space: nowrap; padding-bottom: 20px; } 
+        th, td { padding: 12px 10px; font-size: 11px; vertical-align: middle; border-bottom: 1px solid #f3f4f6; text-align: center; }
+        th { background-color: #f9fafb; font-weight: 600; color: #4b5563; }
+        tr:hover { background-color: #f8fafc; transition: 0.2s; }
+        .btn-action { padding: 4px 8px; border-radius: 4px; font-size: 10px; color: white; margin: 0 2px; transition: 0.2s; }
+        .btn-inject { background-color: #ef4444; } .btn-orders { background-color: #0ea5e9; } .btn-level { background-color: #f59e0b; } .btn-reset { background-color: #64748b; } 
+        .btn-action:hover { opacity: 0.8; transform: scale(1.05); }
+        .modal-scale-in { animation: scaleIn 0.2s ease-out forwards; }
+        @keyframes scaleIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans">
+    <script src="admin_ui.js"></script>
+    <script src="firebase_setup.js"></script> 
+
+    <script>
+        renderAdminUI('members', 'list'); 
+
+        document.getElementById('main-content').innerHTML = `
+            <div class="bg-white p-5 shadow-sm border-b flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold text-gray-800">👥 รายชื่อสมาชิก (Member List)</h2>
+                <div class="flex gap-2">
+                    <button onclick="openAddMemberModal()" class="bg-white border border-gray-300 text-gray-600 px-3 py-1.5 rounded text-xs hover:bg-gray-50 font-bold shadow-sm transition">
+                        <i class="fa-solid fa-user-plus text-green-500"></i> เพิ่มสมาชิก
+                    </button>
+                </div>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4 mx-4">
+                <div class="flex gap-2">
+                    <input type="text" id="search-input" onkeyup="renderTable()" placeholder="ค้นหาสมาชิก..." class="border px-3 py-2 text-xs rounded w-64 focus:outline-none focus:border-indigo-500">
+                    <button class="bg-indigo-600 text-white px-4 py-2 rounded text-xs shadow hover:bg-indigo-700">ค้นหา</button>
+                </div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 mx-4 overflow-hidden">
+                <div class="table-wrapper custom-scroll">
+                    <table class="w-full">
+                        <thead>
+                            <tr>
+                                <th><input type="checkbox"></th>
+                                <th>ไอดี</th>
+                                <th>เวลาลงทะเบียน</th>
+                                <th>หมายเลขโทรศัพท์</th>
+                                <th>ชื่อผู้ใช้</th>
+                                <th>ระดับ</th>
+                                <th>ยอดสั่งซื้อวันนี้</th>
+                                <th>รหัสเชิญ</th>
+                                <th class="text-right">ยอดเงินรวม</th>
+                                <th class="text-right text-blue-600">ยอดที่ใช้ได้</th> <th>สถานะออนไลน์</th>
+                                <th>ดำเนินการ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="users-body"><tr><td colspan="12" class="text-center p-12 text-gray-400">กำลังโหลดข้อมูล...</td></tr></tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        // Modals Code (Add Member, Level, History) - คงเดิมไว้
+        const modalAddHtml = `<div id="modal-add-member" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 backdrop-blur-sm font-sans"><div class="bg-white rounded-lg shadow-2xl w-full max-w-lg modal-scale-in overflow-hidden"><div class="flex justify-between items-center p-4 border-b"><h3 class="font-bold text-gray-700">เพิ่มสมาชิก</h3><button onclick="closeModal('modal-add-member')" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button></div><div class="p-6 space-y-4"><div class="flex items-center gap-4"><label class="w-32 text-right text-xs font-bold text-gray-600">ตัวแทนระดับ 1</label><select id="add-agent" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 bg-gray-50"><option value="platform">Platform (Admin)</option></select></div><div class="flex items-center gap-4"><label class="w-32 text-right text-xs font-bold text-gray-600">ชื่อผู้ใช้</label><input type="text" id="add-username" placeholder="โปรดป้อนชื่อผู้ใช้" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"></div><div class="flex items-center gap-4"><label class="w-32 text-right text-xs font-bold text-gray-600">หมายเลขโทรศัพท์ <span class="text-red-500">*</span></label><div class="flex-1 flex border border-gray-300 rounded overflow-hidden"><select id="add-country-code" class="bg-gray-50 px-2 py-2 text-sm border-r border-gray-300 focus:outline-none font-bold text-gray-700 cursor-pointer"><option value="+66">🇹🇭 +66</option><option value="+856">🇱🇦 +856</option><option value="+95">🇲🇲 +95</option><option value="+84">🇻🇳 +84</option><option value="+855">🇰🇭 +855</option><option value="+60">🇲🇾 +60</option><option value="+99">🏳️ +99</option></select><input type="tel" id="add-phone" placeholder="ไม่ต้องใส่ 0 นำหน้า" class="flex-1 px-3 py-2 text-sm focus:outline-none"></div></div><div class="flex items-center gap-4"><label class="w-32 text-right text-xs font-bold text-gray-600">รหัสผ่าน <span class="text-red-500">*</span></label><input type="text" id="add-password" placeholder="โปรดป้อนรหัสผ่าน" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"></div><div class="flex items-center gap-4"><label class="w-32 text-right text-xs font-bold text-gray-600">รหัสผู้แนะนำ</label><input type="text" id="add-upline" placeholder="ระบุรหัสผู้แนะนำ (ถ้ามี)" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"></div></div><div class="bg-gray-50 p-4 flex justify-center gap-3 border-t"><button onclick="saveNewMember()" class="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded text-sm font-bold shadow hover:shadow-md transition">ส่งข้อมูล</button><button onclick="closeModal('modal-add-member')" class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded text-sm font-bold shadow hover:shadow-md transition">ยกเลิก</button></div></div></div>`;
+        document.body.insertAdjacentHTML('beforeend', modalAddHtml);
+
+        const modalLevelHtml = `
+<div id="modal-level" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 backdrop-blur-sm font-sans">
+    <div class="bg-white rounded-lg shadow-2xl w-full max-w-lg modal-scale-in overflow-hidden">
+        <div class="flex justify-between items-center p-4 border-b">
+            <h3 class="font-bold text-gray-700">แก้ไขข้อมูลและยอดเงิน</h3>
+            <button onclick="closeModal('modal-level')" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="p-6 space-y-4">
+            <input type="hidden" id="edit-lvl-uid">
+            
+            <div class="flex items-center gap-4">
+                <label class="w-32 text-right text-xs font-bold text-gray-600">ยอดเงินปัจจุบัน</label>
+                <input type="text" id="edit-lvl-balance-show" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm bg-gray-100 text-gray-500 font-bold" disabled>
+            </div>
+
+            <div class="flex items-center gap-4">
+                <label class="w-32 text-right text-xs font-bold text-green-600">เพิ่มยอดเงิน (+)</label>
+                <input type="number" id="edit-lvl-add-balance" placeholder="ใส่จำนวนเงินที่ต้องการเพิ่ม (เช่น 500)" class="flex-1 border border-green-500 rounded px-3 py-2 text-sm focus:outline-none focus:border-green-700 text-green-700 font-bold">
+            </div>
+
+            <hr class="border-gray-200">
+
+            <div class="flex items-center gap-4">
+                <label class="w-32 text-right text-xs font-bold text-gray-600">ระดับสมาชิก <span class="text-red-500">*</span></label>
+                <select id="edit-lvl-select" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"></select>
+            </div>
+            <div class="flex items-center gap-4">
+                <label class="w-32 text-right text-xs font-bold text-gray-600">กลุ่มโอเวอร์เลย์ <span class="text-red-500">*</span></label>
+                <select id="edit-lvl-overlay" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                    <option value="none">ไม่เข้าร่วม (None)</option>
+                    <option value="group_a">Group A</option>
+                    <option value="group_b">Group B</option>
+                </select>
+            </div>
+            <div class="flex items-center gap-4">
+                <label class="w-32 text-right text-xs font-bold text-gray-600">จำนวนงานระดับ</label>
+                <input type="number" id="edit-lvl-orders" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+            </div>
+        </div>
+        <div class="bg-gray-50 p-4 flex justify-center gap-3 border-t">
+            <button onclick="saveLevel()" class="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded text-sm font-bold shadow">บันทึกและอัปเดตยอด</button>
+            <button onclick="closeModal('modal-level')" class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded text-sm font-bold shadow">ยกเลิก</button>
+        </div>
+    </div>
+</div>`;
+        document.body.insertAdjacentHTML('beforeend', modalLevelHtml);
+
+        const modalHistoryHtml = `
+        <div id="modal-history" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 backdrop-blur-sm">
+            <div class="bg-white rounded-lg shadow-2xl w-full max-w-4xl p-6 modal-scale-in h-[80vh] flex flex-col">
+                <div class="flex justify-between items-center mb-4 border-b pb-2">
+                    <div class="flex items-center gap-2">
+                        <h3 class="font-bold text-gray-800"><i class="fa-solid fa-syringe text-red-500"></i> ประวัติธุรกรรม / แก้ไขยอด (ฉีด)</h3>
+                    </div>
+                    <div class="flex gap-2">
+                         <button onclick="openInjectionModal()" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs font-bold shadow transition">
+                            <i class="fa-solid fa-plus"></i> เพิ่มการฉีด
+                        </button>
+                        <button onclick="closeModal('modal-history')" class="text-gray-400 hover:text-gray-600 ml-2"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                </div>
+                <div class="flex-1 overflow-y-auto custom-scroll">
+                    <table class="w-full text-left">
+                        <thead>
+                            <tr class="bg-gray-100 text-xs text-gray-600">
+                                <th class="p-2">ประเภท</th>
+                                <th class="p-2 text-right">จำนวนเงิน</th>
+                                <th class="p-2 text-center">สถานะ</th>
+                                <th class="p-2">เวลา</th>
+                                <th class="p-2 text-center">จัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-body" class="text-xs"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>`;
+
+        document.body.insertAdjacentHTML('beforeend', modalHistoryHtml);
+        // อย่าลืมลบ document.body.insertAdjacentHTML ตัวเก่าออกด้วยนะครับ แล้วใส่ตัวใหม่นี้แทน
+        // หรือถ้าเพิ่งวางโค้ดขั้นตอนที่ 1 ไป ก็วางตัวนี้ทับตัวเดิมได้เลย
+
+        // --- LOGIC ---
+        let allUsers = [];
+        let frozenMap = {}; // ✅ ตัวแปรเก็บยอด Frozen ของแต่ละคน
+        let levelMap = {};
+        // --- 1. เพิ่มตัวแปร Global เพื่อจำว่ากำลังจัดการ User คนไหน ---
+        let currentTargetUserId = null; 
+
+        // --- 2. เพิ่ม HTML Modal สำหรับการ "ฉีด" (Inject) ---
+        // (ก๊อปปี้ไปวางต่อจาก modalHistoryHtml เดิม หรือวางไว้แถวๆ modal อื่นๆ ก็ได้ครับ)
+        const modalInjectHtml = `
+        <div id="modal-inject" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-[60] backdrop-blur-sm font-sans">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-lg modal-scale-in overflow-hidden">
+                <div class="flex justify-between items-center p-4 border-b">
+                    <h3 class="font-bold text-gray-700">เพิ่มการฉีด / แก้ไขยอด</h3>
+                    <button onclick="closeModal('modal-inject')" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="p-6 space-y-4">
+                    
+                    <div class="flex items-center gap-4">
+                        <label class="w-32 text-right text-xs font-bold text-gray-600">ประเภทธุรกรรม</label>
+                        <select id="inj-type" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                            <option value="deposit">➕ เติมเงิน (Deposit)</option>
+                            <option value="withdraw">➖ หักเงิน (Withdraw)</option>
+                        </select>
+                    </div>
+
+                    <div class="flex items-center gap-4">
+                        <label class="w-32 text-right text-xs font-bold text-gray-600">จำนวนเงิน</label>
+                        <input type="number" id="inj-amount" placeholder="0.00" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                    </div>
+
+                    <div class="flex items-center gap-4">
+                        <label class="w-32 text-right text-xs font-bold text-gray-600">หมายเหตุ/บันทึก</label>
+                        <input type="text" id="inj-memo" placeholder="ระบุเหตุผล (เช่น ปรับยอดคงค้าง)" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                    </div>
+
+                    <div class="bg-yellow-50 p-3 rounded border border-yellow-200 text-xs text-yellow-700 mt-2">
+                        <i class="fa-solid fa-circle-info mr-1"></i> การดำเนินการนี้จะส่งผลต่อยอดเงินในกระเป๋าของสมาชิกทันที และจะถูกบันทึกในประวัติธุรกรรม
+                    </div>
+
+                </div>
+                <div class="bg-gray-50 p-4 flex justify-center gap-3 border-t">
+                    <button onclick="saveInjection()" class="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded text-sm font-bold shadow">ยืนยัน (ส่ง)</button>
+                    <button onclick="closeModal('modal-inject')" class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded text-sm font-bold shadow">ยกเลิก</button>
+                </div>
+            </div>
+        </div>`;
+        document.body.insertAdjacentHTML('beforeend', modalInjectHtml);
+        // --- 3. เพิ่ม HTML Modal ตั้งค่าคำสั่งซื้อ (Order Settings) ---
+        const modalOrderSettingsHtml = `
+        <div id="modal-order-settings" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-[60] backdrop-blur-sm font-sans">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-lg modal-scale-in overflow-hidden">
+                <div class="flex justify-between items-center p-4 border-b bg-gray-50">
+                    <h3 class="font-bold text-gray-700"><i class="fa-solid fa-gear text-blue-500"></i> ตั้งค่าเงื่อนไขสมาชิก</h3>
+                    <button onclick="closeModal('modal-order-settings')" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="p-6 space-y-4">
+                    
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 mb-1">🎯 เป้าหมายคำสั่งซื้อ (Order Target)</label>
+                        <div class="flex items-center border border-gray-300 rounded px-3 py-2 bg-white">
+                            <input type="number" id="set-target-orders" placeholder="0" class="flex-1 text-sm focus:outline-none text-gray-700 font-bold">
+                            <span class="text-xs text-gray-400">รายการ</span>
+                        </div>
+                        <p class="text-[10px] text-gray-400 mt-1">* สมาชิกต้องทำออเดอร์ให้ครบจำนวนนี้ จึงจะสามารถกดถอนเงินได้</p>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 mb-1">💸 อัตราค่าคอมมิชชั่น (Custom Rate)</label>
+                        <div class="flex items-center border border-gray-300 rounded px-3 py-2 bg-white">
+                            <input type="number" id="set-commission" placeholder="เช่น 0.2000" step="0.0001" class="flex-1 text-sm focus:outline-none text-gray-700 font-bold">
+                            <span class="text-xs text-gray-400">%</span>
+                        </div>
+                        <p class="text-[10px] text-gray-400 mt-1">* ถ้าใส่ค่านี้ ระบบจะใช้อัตรานี้แทนเรทมาตรฐานของระดับ VIP</p>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 mb-1">🏦 ข้อจำกัดในการถอนเงิน (Withdraw Limit)</label>
+                        <div class="flex items-center border border-gray-300 rounded px-3 py-2 bg-white">
+                            <input type="number" id="set-withdraw-limit" placeholder="เช่น 3" class="flex-1 text-sm focus:outline-none text-gray-700 font-bold">
+                            <span class="text-xs text-gray-400">ครั้ง / เดือน</span>
+                        </div>
+                        <p class="text-[10px] text-gray-400 mt-1">* จำนวนครั้งที่อนุญาตให้ถอนได้ในแต่ละเดือน (จะรีเซ็ตเมื่อขึ้นเดือนใหม่)</p>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 mb-1">📉 ถอนขั้นต่ำ (Minimum Withdraw)</label>
+                        <div class="flex items-center border border-gray-300 rounded px-3 py-2 bg-white">
+                            <span class="text-xs text-gray-400 mr-1">฿</span>
+                            <input type="number" id="set-min-withdraw" placeholder="0.00" class="flex-1 text-sm focus:outline-none text-gray-700 font-bold">
+                        </div>
+                    </div>
+
+                </div>
+                <div class="bg-gray-50 p-4 flex justify-center gap-3 border-t">
+                    <button onclick="saveOrderSettings()" class="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded text-sm font-bold shadow">บันทึกการตั้งค่า</button>
+                    <button onclick="closeModal('modal-order-settings')" class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded text-sm font-bold shadow">ยกเลิก</button>
+                </div>
+            </div>
+        </div>`;
+        document.body.insertAdjacentHTML('beforeend', modalOrderSettingsHtml);
+        async function initData() {
+            if (!window.db) return setTimeout(initData, 1000);
+            
+            // โหลด Levels
+            // โหลด Levels และจำค่าจำนวนงาน
+const levelsSnap = await db.collection("levels").orderBy("price", "asc").get();
+const levelSelect = document.getElementById('edit-lvl-select');
+levelSelect.innerHTML = '';
+
+levelMap = {}; // รีเซ็ตค่า
+
+levelsSnap.forEach(doc => { 
+    const data = doc.data();
+    
+    // ✅ จำค่าจำนวนงานไว้ (สมมติใน DB ชื่อฟิลด์ว่า orders หรือ task_count)
+    // ถ้าในฐานข้อมูลคุณตั้งชื่ออื่น ให้แก้ตรง data.orders เป็นชื่อนั้นครับ
+    levelMap[data.name] = data.orders || 0; 
+
+    const option = document.createElement('option'); 
+    option.value = data.name; 
+    option.innerText = data.name; 
+    levelSelect.appendChild(option); 
+});
+
+            // ✅ 1. ดักจับออเดอร์ที่ Frozen ทั้งหมดมาคำนวณรอไว้
+            db.collection("orders").where("status", "==", "frozen").onSnapshot(snap => {
+                frozenMap = {}; // Reset
+                snap.forEach(doc => {
+                    const d = doc.data();
+                    if(d.username && d.amount) {
+                        // บวกยอด Frozen รวมตาม Username
+                        frozenMap[d.username] = (frozenMap[d.username] || 0) + parseFloat(d.amount);
+                    }
+                });
+                renderTable(); // อัปเดตตารางเมื่อยอด Frozen เปลี่ยน
+            });
+
+            // ✅ 2. ดักจับข้อมูล Users
+            db.collection("users").onSnapshot(snap => {
+                allUsers = [];
+                snap.forEach(doc => allUsers.push({ docId: doc.id, ...doc.data() }));
+                renderTable();
+            });
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('users-body');
+            const search = document.getElementById('search-input').value.toLowerCase();
+            const now = new Date(); 
+
+            allUsers.sort((a,b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+
+            let html = '';
+            allUsers.forEach(u => {
+                if (search && !u.username.toLowerCase().includes(search) && !u.phone.includes(search)) return;
+                
+                // คำนวณ Online Status
+                let statusHtml = '<span class="px-2 py-0.5 rounded text-[10px] bg-gray-100 text-gray-400">ไม่เคยใช้งาน</span>';
+                if (u.last_active) {
+                    const lastActiveTime = new Date(u.last_active);
+                    const diffMinutes = (now - lastActiveTime) / 1000 / 60; 
+                    if (diffMinutes < 2) { 
+                        statusHtml = '<span class="px-2 py-0.5 rounded text-[10px] bg-green-100 text-green-700 font-bold">Online</span>';
+                    } else {
+                        const timeStr = lastActiveTime.toLocaleString('th-TH', { hour: '2-digit', minute: '2-digit', day: 'numeric', month: 'short' });
+                        statusHtml = `<span class="px-2 py-0.5 rounded text-[10px] bg-gray-100 text-gray-500">Offline (${timeStr})</span>`;
+                    }
+                }
+
+                // ✅ คำนวณยอดเงิน
+                const totalBalance = parseFloat(u.balance || 0);
+                const frozenAmount = frozenMap[u.username] || 0;
+                const availableBalance = totalBalance - frozenAmount;
+
+                html += `
+                    <tr class="border-b last:border-b-0 hover:bg-gray-50">
+                        <td><input type="checkbox"></td>
+                        <td>${u.id || '-'}</td>
+                        <td class="text-gray-500 text-[10px]">${u.created_at ? new Date(u.created_at).toLocaleString('th-TH') : '-'}</td>
+                        <td>${u.phone || '-'}</td>
+                        <td class="font-bold text-blue-600">${u.username}</td>
+                        <td><span class="px-2 py-0.5 rounded text-[10px] border font-bold text-purple-600 bg-purple-50 border-purple-100">${u.level || 'ทั่วไป'}</span></td>
+                        <td>${u.todayCount || 0}/${levelMap[u.level] || 0}</td>
+                        <td class="font-mono text-gray-500">${u.invite_code || '-'}</td>
+                        <td class="text-right font-bold text-gray-700">฿${totalBalance.toLocaleString()}</td>
+                        <td class="text-right font-bold text-blue-600">฿${availableBalance.toLocaleString()}</td> <td>${statusHtml}</td>
+                        <td class="flex justify-center py-2">
+                            <button onclick="openHistory('${u.docId}')" class="btn-action btn-inject">ฉีด</button>
+                            <button onclick="openOrderSettings('${u.docId}')" class="btn-action btn-orders">คำสั่งซื้อ</button>
+                            <button onclick="openLevelEdit('${u.docId}')" class="btn-action btn-level">ระดับ</button>
+                            <button onclick="alert('กำลังพัฒนา')" class="btn-action btn-reset">รีเซ็ต</button>
+                        </td>
+                    </tr>`;
+            });
+            tbody.innerHTML = html || '<tr><td colspan="12" class="text-center p-8 text-gray-400">ไม่พบสมาชิก</td></tr>';
+        }
+
+        window.openAddMemberModal = () => { document.getElementById('add-username').value = ''; document.getElementById('add-phone').value = ''; document.getElementById('add-password').value = ''; document.getElementById('add-upline').value = ''; const modal = document.getElementById('modal-add-member'); modal.classList.remove('hidden'); modal.classList.add('flex'); }
+        window.saveNewMember = async () => { const username = document.getElementById('add-username').value.trim(); const countryCode = document.getElementById('add-country-code').value; let phoneBody = document.getElementById('add-phone').value.trim(); const password = document.getElementById('add-password').value.trim(); const upline = document.getElementById('add-upline').value.trim() || 'admin'; if(!phoneBody || !password) { alert("กรุณากรอกเบอร์โทรและรหัสผ่าน"); return; } if (phoneBody.startsWith('0')) { phoneBody = phoneBody.substring(1); } const fullPhone = `${countryCode} ${phoneBody}`; try { const check = await db.collection("users").where("phone", "==", fullPhone).get(); if(!check.empty) { alert("เบอร์โทรศัพท์นี้มีผู้ใช้งานแล้ว"); return; } const randomId = Math.floor(100000 + Math.random() * 900000); const randomInvite = Math.floor(100000 + Math.random() * 900000).toString(); await db.collection("users").add({ username: username || phoneBody, phone: fullPhone, password: password, upline: upline, balance: 0, level: "VIP 1", id: randomId, invite_code: randomInvite, created_at: new Date().toISOString(), todayCount: 0, online: false }); closeModal('modal-add-member'); alert(`เพิ่มสมาชิกสำเร็จ! (รหัสเชิญ: ${randomInvite})`); } catch(e) { alert("Error: " + e.message); } }
+        window.openLevelEdit = (docId) => { 
+    const user = allUsers.find(u => u.docId === docId); 
+    if (!user) return; 
+
+    document.getElementById('edit-lvl-uid').value = docId; 
+    
+    // ตั้งค่าเดิม
+    document.getElementById('edit-lvl-select').value = user.level || 'VIP 1'; 
+    document.getElementById('edit-lvl-overlay').value = user.overlay_group || 'none'; 
+    document.getElementById('edit-lvl-orders').value = user.todayCount || 0; 
+
+    // เพิ่มใหม่: โชว์ยอดเงินปัจจุบันและเคลียร์ช่องเติมเงิน
+    document.getElementById('edit-lvl-balance-show').value = parseFloat(user.balance || 0).toLocaleString();
+    document.getElementById('edit-lvl-add-balance').value = '';
+
+    const modal = document.getElementById('modal-level'); 
+    modal.classList.remove('hidden'); 
+    modal.classList.add('flex'); 
+}
+        window.saveLevel = async () => { 
+    const docId = document.getElementById('edit-lvl-uid').value; 
+    const addAmount = parseFloat(document.getElementById('edit-lvl-add-balance').value) || 0;
+
+    try { 
+        let updateData = { 
+            level: document.getElementById('edit-lvl-select').value, 
+            overlay_group: document.getElementById('edit-lvl-overlay').value, 
+            todayCount: parseInt(document.getElementById('edit-lvl-orders').value) || 0 
+        };
+
+        // ถ้ามีการกรอกเงินเพิ่ม
+        if (addAmount !== 0) {
+            // 1. บวกเงินเข้ากระเป๋า User
+            updateData.balance = firebase.firestore.FieldValue.increment(addAmount);
+
+            // 2. (สำคัญ) สร้างประวัติการเติมเงิน เพื่อให้ Dashboard มองเห็น
+            await db.collection("recharges").add({
+                user_id: docId,
+                amount: addAmount,
+                status: 'approved',        // ต้องสถานะ approved Dashboard ถึงจะนับ
+                timestamp: new Date().toISOString(),
+                method: 'admin_manual',    // ระบุว่าแอดมินเติมให้
+                username: 'Admin Inject'   // ใส่ไว้ให้รู้ว่าเป็นยอดจากระบบ
+            });
+        }
+
+        await db.collection("users").doc(docId).update(updateData); 
+        
+        closeModal('modal-level'); 
+        
+        if(addAmount !== 0) {
+            alert(`เพิ่มยอดเงินสำเร็จ +${addAmount.toLocaleString()} และบันทึกลงยอดรวมแล้ว`);
+        } else {
+            alert("บันทึกข้อมูลเรียบร้อย");
+        }
+        
+    } catch(e) { 
+        alert("เกิดข้อผิดพลาด: " + e.message); 
+    } 
+}
+       // 1. แก้ไขฟังก์ชันเปิดประวัติ (ให้จำ User ID)
+        window.openHistory = async (docId) => { 
+            currentTargetUserId = docId; // ✅ จำ ID ผู้ใช้ไว้
+            document.getElementById('history-body').innerHTML = '<tr><td colspan="5" class="text-center p-4">กำลังโหลด...</td></tr>'; 
+            
+            const modal = document.getElementById('modal-history'); 
+            modal.classList.remove('hidden'); 
+            modal.classList.add('flex'); 
+            
+            await renderHistoryTable(docId); // แยกฟังก์ชันโหลดตารางออกมา
+        }
+
+        // 2. ฟังก์ชันโหลดตาราง (แยกออกมาเพื่อให้เรียกซ้ำได้)
+        async function renderHistoryTable(docId) {
+            let html = ''; 
+            
+            // ดึงข้อมูลเติมเงิน (Recharges)
+            const rSnap = await db.collection("recharges").where("user_id", "==", docId).orderBy("timestamp", "desc").limit(20).get(); 
+            rSnap.forEach(d => { 
+                const data = d.data();
+                html += `
+                <tr class="border-b hover:bg-gray-50">
+                    <td class="p-2 text-green-600 font-bold">เติมเงิน/ฉีด</td>
+                    <td class="p-2 text-right text-green-600 font-bold">+${Number(data.amount).toLocaleString()}</td>
+                    <td class="p-2 text-center"><span class="bg-green-100 text-green-800 px-2 rounded-full text-[10px]">${data.status}</span></td>
+                    <td class="p-2 text-gray-500 text-[10px]">${new Date(data.timestamp).toLocaleString()}</td>
+                    <td class="p-2 text-center flex justify-center gap-2">
+                        <button onclick="editTx('recharges', '${d.id}', ${data.amount})" class="text-blue-500 hover:text-blue-700 bg-blue-50 p-1 rounded"><i class="fa-solid fa-pen"></i></button>
+                        <button onclick="delTx('recharges', '${d.id}', ${data.amount}, 'plus')" class="text-red-500 hover:text-red-700 bg-red-50 p-1 rounded"><i class="fa-solid fa-trash"></i></button>
+                    </td>
+                </tr>`; 
+            }); 
+            
+            // ดึงข้อมูลถอนเงิน (Withdrawals)
+            const wSnap = await db.collection("withdrawals").where("user_id", "==", docId).orderBy("timestamp", "desc").limit(20).get(); 
+            wSnap.forEach(d => { 
+                const data = d.data();
+                html += `
+                <tr class="border-b hover:bg-gray-50">
+                    <td class="p-2 text-red-600 font-bold">ถอนเงิน/หัก</td>
+                    <td class="p-2 text-right text-red-600 font-bold">-${Number(data.amount).toLocaleString()}</td>
+                    <td class="p-2 text-center"><span class="bg-gray-100 text-gray-800 px-2 rounded-full text-[10px]">${data.status}</span></td>
+                    <td class="p-2 text-gray-500 text-[10px]">${new Date(data.timestamp).toLocaleString()}</td>
+                    <td class="p-2 text-center flex justify-center gap-2">
+                        <button onclick="editTx('withdrawals', '${d.id}', ${data.amount})" class="text-blue-500 hover:text-blue-700 bg-blue-50 p-1 rounded"><i class="fa-solid fa-pen"></i></button>
+                        <button onclick="delTx('withdrawals', '${d.id}', ${data.amount}, 'minus')" class="text-red-500 hover:text-red-700 bg-red-50 p-1 rounded"><i class="fa-solid fa-trash"></i></button>
+                    </td>
+                </tr>`; 
+            }); 
+
+            document.getElementById('history-body').innerHTML = html || '<tr><td colspan="5" class="text-center p-4 text-gray-400">ไม่มีประวัติธุรกรรม</td></tr>';
+        }
+
+        // 3. ฟังก์ชันเปิดหน้าต่างฉีด
+        window.openInjectionModal = () => {
+            document.getElementById('inj-amount').value = '';
+            document.getElementById('inj-memo').value = '';
+            const modal = document.getElementById('modal-inject');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        // 4. ฟังก์ชันบันทึกการฉีด (Save Injection)
+        window.saveInjection = async () => {
+            if(!currentTargetUserId) return;
+            
+            const type = document.getElementById('inj-type').value;
+            const amount = parseFloat(document.getElementById('inj-amount').value);
+            const memo = document.getElementById('inj-memo').value;
+
+            if(!amount || amount <= 0) {
+                alert("กรุณาระบุจำนวนเงินที่ถูกต้อง");
+                return;
+            }
+
+            try {
+                // เตรียมข้อมูล
+                const txData = {
+                    user_id: currentTargetUserId,
+                    amount: amount,
+                    status: 'approved',
+                    timestamp: new Date().toISOString(),
+                    method: 'admin_injection',
+                    memo: memo || 'Admin Manual Inject'
+                };
+
+                if (type === 'deposit') {
+                    // 1. เพิ่มลง Recharges
+                    await db.collection("recharges").add(txData);
+                    // 2. บวกเงิน User
+                    await db.collection("users").doc(currentTargetUserId).update({
+                        balance: firebase.firestore.FieldValue.increment(amount)
+                    });
+                } else {
+                    // 1. เพิ่มลง Withdrawals
+                    await db.collection("withdrawals").add(txData);
+                    // 2. ลบเงิน User
+                    await db.collection("users").doc(currentTargetUserId).update({
+                        balance: firebase.firestore.FieldValue.increment(-amount)
+                    });
+                }
+
+                closeModal('modal-inject');
+                // โหลดตารางใหม่ทันทีโดยไม่ต้องปิดหน้าต่าง
+                await renderHistoryTable(currentTargetUserId);
+                alert("ดำเนินการฉีดเรียบร้อย ✅");
+
+            } catch(e) {
+                alert("เกิดข้อผิดพลาด: " + e.message);
+            }
+        }
+        // 7. ฟังก์ชันเปิดหน้าต่างตั้งค่าคำสั่งซื้อ
+        window.openOrderSettings = (docId) => {
+            currentTargetUserId = docId;
+            const user = allUsers.find(u => u.docId === docId);
+            if (!user) return;
+
+            // ดึงค่าเก่ามาแสดง (ถ้าไม่มีให้เป็นค่าว่างหรือ 0)
+            document.getElementById('set-target-orders').value = user.req_orders || '';      // เป้าหมายออเดอร์
+            document.getElementById('set-commission').value = user.custom_rate || '';        // เรทพิเศษ
+            document.getElementById('set-withdraw-limit').value = user.withdraw_limit || ''; // จำกัดถอนต่อเดือน
+            document.getElementById('set-min-withdraw').value = user.min_withdraw || '';     // ถอนขั้นต่ำ
+
+            const modal = document.getElementById('modal-order-settings');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        // 8. ฟังก์ชันบันทึกการตั้งค่า (Save Settings)
+        window.saveOrderSettings = async () => {
+            if (!currentTargetUserId) return;
+
+            // รับค่าจากฟอร์ม
+            const reqOrders = parseInt(document.getElementById('set-target-orders').value) || 0;
+            const customRate = parseFloat(document.getElementById('set-commission').value) || 0;
+            const withdrawLimit = parseInt(document.getElementById('set-withdraw-limit').value) || 0;
+            const minWithdraw = parseFloat(document.getElementById('set-min-withdraw').value) || 0;
+
+            try {
+                // อัปเดตข้อมูลลงใน User Document โดยตรง
+                await db.collection("users").doc(currentTargetUserId).update({
+                    req_orders: reqOrders,         // ต้องทำครบกี่งาน
+                    custom_rate: customRate,       // เรทคอมมิชชั่นพิเศษ (0 = ใช้ตามระบบ)
+                    withdraw_limit: withdrawLimit, // ถอนได้กี่ครั้ง/เดือน (0 = ไม่จำกัด)
+                    min_withdraw: minWithdraw,     // ถอนขั้นต่ำ
+                    
+                    // เพิ่ม Timestamp ว่าอัปเดตเมื่อไหร่ (เผื่อไว้ดู)
+                    settings_updated_at: new Date().toISOString()
+                });
+
+                closeModal('modal-order-settings');
+                alert("✅ บันทึกเงื่อนไขสำหรับสมาชิกเรียบร้อยแล้ว");
+                
+                // (ถ้าต้องการ) อาจจะรีโหลดตารางเพื่อให้แน่ใจว่าข้อมูลล่าสุดถูกดึงมาแล้ว
+                // renderTable(); 
+
+            } catch(e) {
+                alert("เกิดข้อผิดพลาด: " + e.message);
+            }
+        }
+
+        // 5. ฟังก์ชันแก้ไขยอด (Edit Transaction)
+        window.editTx = async (collectionName, docId, oldAmount) => {
+            const newAmountStr = prompt("แก้ไขจำนวนเงิน:", oldAmount);
+            if (newAmountStr === null) return; // กดยกเลิก
+            
+            const newAmount = parseFloat(newAmountStr);
+            if (isNaN(newAmount) || newAmount < 0) {
+                alert("จำนวนเงินไม่ถูกต้อง");
+                return;
+            }
+
+            try {
+                // 1. คำนวณส่วนต่าง
+                const diff = newAmount - oldAmount; // เช่น แก้จาก 100 เป็น 150 -> diff = 50
+                
+                // 2. อัปเดตใน Transaction
+                await db.collection(collectionName).doc(docId).update({
+                    amount: newAmount,
+                    memo: 'Edited by Admin'
+                });
+
+                // 3. อัปเดตเงินในกระเป๋า User ตามส่วนต่าง
+                // ถ้าเป็น recharges (เงินเข้า) -> บวกส่วนต่างเพิ่มเข้าไป
+                // ถ้าเป็น withdrawals (เงินออก) -> ลบส่วนต่างออก (เพราะเงินออกมากขึ้น = balance ลดลง)
+                let balanceChange = 0;
+                if (collectionName === 'recharges') {
+                    balanceChange = diff; 
+                } else {
+                    balanceChange = -diff;
+                }
+
+                if (balanceChange !== 0) {
+                    await db.collection("users").doc(currentTargetUserId).update({
+                        balance: firebase.firestore.FieldValue.increment(balanceChange)
+                    });
+                }
+
+                await renderHistoryTable(currentTargetUserId);
+                alert("แก้ไขยอดเรียบร้อย");
+
+            } catch(e) {
+                alert("Error: " + e.message);
+            }
+        }
+
+        // 6. ฟังก์ชันลบรายการ (ปรับปรุงให้คืนเงินด้วย)
+        window.delTx = async (col, id, amount, type) => { 
+            if(confirm('ต้องการลบรายการนี้ และคืนค่าเงินกลับสู่สภาพเดิมหรือไม่?')) { 
+                try {
+                    await db.collection(col).doc(id).delete();
+                    
+                    // คืนค่าเงิน (Reverse Balance)
+                    let reverseAmount = 0;
+                    if (type === 'plus') {
+                        // ลบยอดเติมเงิน -> ต้องลบเงิน User ออก
+                        reverseAmount = -amount;
+                    } else {
+                        // ลบยอดถอนเงิน -> ต้องคืนเงินกลับให้ User
+                        reverseAmount = amount;
+                    }
+
+                    await db.collection("users").doc(currentTargetUserId).update({
+                        balance: firebase.firestore.FieldValue.increment(reverseAmount)
+                    });
+
+                    await renderHistoryTable(currentTargetUserId);
+                    alert('ลบรายการและปรับปรุงยอดเงินแล้ว');
+                } catch(e) {
+                    alert("Error: " + e.message);
+                }
+            } 
+        }
+        window.closeModal = (id) => { const el = document.getElementById(id); el.classList.add('hidden'); el.classList.remove('flex'); }
+
+        initData();
+    </script>
+</body>
+</html>

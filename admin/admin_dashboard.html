@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <script>
+    // --- ระบบป้องกันการเข้าถึง (Security Check) ---
+    // ถ้าในเครื่องไม่มีข้อมูลว่า 'admin_logged_in' เป็น 'true'
+    if (localStorage.getItem('admin_logged_in') !== 'true') {
+        // ให้ดีดกลับไปที่หน้า Login ทันที (ถอยโฟลเดอร์ออกมา 1 ขั้น แล้วเข้า admin_login)
+        window.location.href = '../admin_login/index.html';
+    }
+</script>
+    <meta charset="UTF-8">
+    <title>Admin - สถิติห้างสรรพสินค้า</title>
+    <link rel="stylesheet" href="admin_style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <style>
+        .stat-card { transition: transform 0.2s; }
+        .stat-card:hover { transform: translateY(-5px); }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans">
+    <script src="admin_ui.js"></script>
+    <script src="firebase_setup.js"></script> 
+
+    <script>
+        // เรียกใช้เมนู Home
+        renderAdminUI('home', ''); 
+
+        document.getElementById('main-content').innerHTML = `
+            <div class="p-6">
+                <div class="mb-6">
+                    <h2 class="text-xl font-bold text-gray-700">สถิติห้างสรรพสินค้า</h2>
+                    <p class="text-xs text-gray-500">ภาพรวมข้อมูลระบบล่าสุด (Real-time)</p>
+                </div>
+
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    
+                    <div class="bg-[#4DB6AC] text-white p-4 rounded shadow stat-card relative overflow-hidden">
+                        <i class="fa-solid fa-layer-group absolute right-2 top-2 text-5xl opacity-20"></i>
+                        <h3 class="text-xs font-bold opacity-90">หมายเลขเติมเงินครั้งแรก</h3>
+                        <div class="text-3xl font-bold my-2">0</div>
+                        <p class="text-[10px] opacity-80">วันนี้มีลูกค้า 0 รายทำรายการ</p>
+                        <p class="text-[10px] opacity-70">เมื่อวานนี้มีผู้ซื้อบ้านครั้งแรกจำนวน 0 ราย</p>
+                    </div>
+
+                    <div class="bg-[#FF4081] text-white p-4 rounded shadow stat-card relative overflow-hidden">
+                        <i class="fa-solid fa-user-group absolute right-2 top-2 text-5xl opacity-20"></i>
+                        <h3 class="text-xs font-bold opacity-90">จำนวนผู้ใช้ทั้งหมด</h3>
+                        <div class="text-3xl font-bold my-2" id="stat-users">0</div>
+                        <p class="text-[10px] opacity-80">เพิ่มผู้ใช้ใหม่ <span id="stat-users-today">0</span> ราย ในวันนี้</p>
+                        <p class="text-[10px] opacity-70">เมื่อวานนี้มีการเพิ่มผู้ใช้ใหม่ 0 ราย</p>
+                    </div>
+
+                    <div class="bg-[#AB47BC] text-white p-4 rounded shadow stat-card relative overflow-hidden">
+                        <i class="fa-solid fa-book-open absolute right-2 top-2 text-5xl opacity-20"></i>
+                        <h3 class="text-xs font-bold opacity-90">ยอดสั่งซื้อทั้งหมด</h3>
+                        <div class="text-3xl font-bold my-2" id="stat-orders-count">0</div>
+                        <p class="text-[10px] opacity-80">วันนี้มีคำสั่งซื้อใหม่ <span id="stat-orders-today">0</span> รายการ</p>
+                        <p class="text-[10px] opacity-70">เมื่อวานนี้มีคำสั่งซื้อใหม่ 0 รายการ</p>
+                    </div>
+
+                    <div class="bg-[#5C6BC0] text-white p-4 rounded shadow stat-card relative overflow-hidden">
+                        <i class="fa-solid fa-yen-sign absolute right-2 top-2 text-5xl opacity-20"></i>
+                        <h3 class="text-xs font-bold opacity-90">ยอดขายรวม</h3>
+                        <div class="text-2xl font-bold my-2" id="stat-sales-total">฿0.00</div>
+                        <p class="text-[10px] opacity-80">ยอดรวมคำสั่งซื้อใหม่ในวันนี้คือ <span id="stat-sales-today">฿0</span></p>
+                        <p class="text-[10px] opacity-70">ยอดรวมคำสั่งซื้อใหม่เมื่อวานนี้อยู่ ฿0</p>
+                    </div>
+
+                    <div class="bg-[#FFCA28] text-white p-4 rounded shadow stat-card relative overflow-hidden">
+                        <i class="fa-regular fa-file-lines absolute right-2 top-2 text-5xl opacity-20"></i>
+                        <h3 class="text-xs font-bold opacity-90">การเติมเงินของผู้ใช้</h3>
+                        <div class="text-2xl font-bold my-2" id="stat-deposit-total">฿0.00</div>
+                        <p class="text-[10px] opacity-80">ยอดเติมเงินใหม่วันนี้: <span id="stat-deposit-today">฿0</span></p>
+                        <p class="text-[10px] opacity-70">เมื่อวานนี้มีการเติมเงินเข้าบัญชีจำนวน ฿0</p>
+                    </div>
+
+                    <div class="bg-[#FFB300] text-white p-4 rounded shadow stat-card relative overflow-hidden">
+    <i class="fa-solid fa-users absolute right-2 top-2 text-5xl opacity-20"></i>
+    <h3 class="text-xs font-bold opacity-90">จำนวนคนเติมเงิน</h3>
+    <div class="text-3xl font-bold my-2" id="stat-deposit-users-total">0</div>
+    <p class="text-[10px] opacity-80">วันนี้มีคนเติมเงิน <span id="stat-deposit-users-today">0</span> คน</p>
+    <p class="text-[10px] opacity-70">เมื่อวานนี้มีคนเติมเงิน <span id="stat-deposit-users-yesterday">0</span> คน</p>
+</div>
+
+                    <div class="bg-[#F57C00] text-white p-4 rounded shadow stat-card relative overflow-hidden">
+                        <i class="fa-solid fa-dollar-sign absolute right-2 top-2 text-5xl opacity-20"></i>
+                        <h3 class="text-xs font-bold opacity-90">การถอนของผู้ใช้</h3>
+                        <div class="text-2xl font-bold my-2" id="stat-withdraw-total">฿0.00</div>
+                        <p class="text-[10px] opacity-80">มีการถอนเงินใหม่ <span id="stat-withdraw-today-count">0</span> รายการในวันนี้</p>
+                        <p class="text-[10px] opacity-70">เมื่อวานนี้ มีการถอนเงินจำนวน ฿0</p>
+                    </div>
+
+                    <div class="bg-[#FF5722] text-white p-4 rounded shadow stat-card relative overflow-hidden">
+                        <i class="fa-solid fa-hand-holding-dollar absolute right-2 top-2 text-5xl opacity-20"></i>
+                        <h3 class="text-xs font-bold opacity-90">จำนวนการถอนเงิน</h3>
+                        <div class="text-3xl font-bold my-2" id="stat-withdraw-count">0</div>
+                        <p class="text-[10px] opacity-80">วันนี้มีผู้ถอนเงิน <span id="stat-withdraw-users-today">0</span> คน</p>
+                        <p class="text-[10px] opacity-70">เมื่อวานนี้มีคนถอนเงิน 0 คน</p>
+                    </div>
+
+                    <div class="bg-[#880E4F] text-white p-4 rounded shadow stat-card relative overflow-hidden">
+                        <i class="fa-solid fa-pen-to-square absolute right-2 top-2 text-5xl opacity-20"></i>
+                        <h3 class="text-xs font-bold opacity-90">ค่าคอมมิชชั่นการแย่งชิงคำสั่งซื้อ</h3>
+                        <div class="text-2xl font-bold my-2" id="stat-commission-total">฿0.00</div>
+                        <p class="text-[10px] opacity-80">ค่าคอมมิชชั่นใหม่ในวันนี้คือ <span id="stat-commission-today">฿0</span></p>
+                        <p class="text-[10px] opacity-70">ค่าคอมมิชชั่นใหม่เมื่อวานนี้คือ ฿0</p>
+                    </div>
+
+                    <div class="bg-[#00C853] text-white p-4 rounded shadow stat-card relative overflow-hidden">
+                        <i class="fa-solid fa-sack-dollar absolute right-2 top-2 text-5xl opacity-20"></i>
+                        <h3 class="text-xs font-bold opacity-90">การโอนถ่ายดอกเบี้ยสมบัติ</h3>
+                        <div class="text-3xl font-bold my-2">0</div>
+                        <p class="text-[10px] opacity-80">ไม่มีผลิตภัณฑ์ดอกเบี้ยใหม่เพิ่มเข้ามาในวันนี้</p>
+                        <p class="text-[10px] opacity-70">เมื่อวานนี้ไม่มี การเพิ่มผลิตภัณฑ์ที่ให้ดอกเบี้ยเข้ามา</p>
+                    </div>
+
+                    <div class="bg-[#D88888] text-white p-4 rounded shadow stat-card relative overflow-hidden">
+                        <i class="fa-solid fa-file-pen absolute right-2 top-2 text-5xl opacity-20"></i>
+                        <h3 class="text-xs font-bold opacity-90">คณะกรรมการย่อย</h3>
+                        <div class="text-3xl font-bold my-2">0</div>
+                        <p class="text-[10px] opacity-80">ค่าคอมมิชชั่นใหม่วันนี้คือ 0</p>
+                        <p class="text-[10px] opacity-70">ค่าคอมมิชชั่นใหม่เมื่อวานนี้คือ 0</p>
+                    </div>
+
+                    <div class="bg-[#333333] text-white p-4 rounded shadow stat-card relative overflow-hidden">
+                        <i class="fa-solid fa-coins absolute right-2 top-2 text-5xl opacity-20"></i>
+                        <h3 class="text-xs font-bold opacity-90">ยอดคงเหลือผู้ใช้ทั้งหมด</h3>
+                        <div class="text-2xl font-bold my-2" id="stat-users-balance">฿0.00</div>
+                        <p class="text-[10px] opacity-80">ยอดถอนเงินจาก Interest Treasure ในวันนี้: 0</p>
+                        <p class="text-[10px] opacity-70">รายได้ดอกเบี้ยในวันนี้คือ 0</p>
+                    </div>
+
+                </div>
+            </div>
+        `;
+
+        function fetchDashboardData() {
+            if (!window.db) return setTimeout(fetchDashboardData, 1000);
+
+            const today = new Date();
+            // สร้าง string วันที่แบบ "21" (เลขวัน) หรือรูปแบบที่เก็บใน DB
+            const dayStr = String(today.getDate()); 
+            const monthStr = String(today.getMonth() + 1).padStart(2, '0');
+            const yearStr = String(today.getFullYear());
+            // รูปแบบ ISO สั้นๆ สำหรับเทียบ (2026-01-21)
+            const todayISO = `${yearStr}-${monthStr}-${dayStr}`; 
+
+            // 1. Users (Count & Balance)
+            db.collection("users").onSnapshot(snap => {
+                let totalUsers = snap.size;
+                let totalBalance = 0;
+                let newUsersToday = 0;
+
+                snap.forEach(doc => {
+                    const data = doc.data();
+                    totalBalance += parseFloat(data.balance || 0);
+                    // เช็คว่าสมัครวันนี้ไหม (ถ้ามี field created_at)
+                    if(data.created_at && data.created_at.includes(todayISO)) newUsersToday++; 
+                });
+
+                document.getElementById("stat-users").innerText = totalUsers.toLocaleString();
+                document.getElementById("stat-users-today").innerText = newUsersToday;
+                document.getElementById("stat-users-balance").innerText = '฿' + totalBalance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2});
+            });
+
+            // 2. Orders (Sales, Commission, Count)
+            db.collection("orders").onSnapshot(snap => {
+                let totalOrders = snap.size;
+                let totalSales = 0;
+                let totalCommission = 0;
+                let ordersTodayCount = 0;
+                let salesToday = 0;
+                let commissionToday = 0;
+
+                snap.forEach(doc => {
+                    const data = doc.data();
+                    const amount = parseFloat(data.amount) || 0;
+                    const comm = parseFloat(data.commission) || 0;
+                    
+                    // เช็คว่าเป็นออเดอร์วันนี้หรือไม่ (ดูจาก pay_time หรือ order_time)
+                    const isToday = (data.pay_time && data.pay_time.includes(dayStr)) || (data.order_time && data.order_time.includes(dayStr));
+
+                    if (data.status === 'completed') {
+                        totalSales += amount;
+                        totalCommission += comm;
+                        
+                        if (isToday) {
+                            salesToday += amount;
+                            commissionToday += comm;
+                        }
+                    }
+                    if (isToday) ordersTodayCount++;
+                });
+
+                document.getElementById("stat-orders-count").innerText = totalOrders.toLocaleString();
+                document.getElementById("stat-orders-today").innerText = ordersTodayCount.toLocaleString();
+                document.getElementById("stat-sales-total").innerText = '฿' + totalSales.toLocaleString();
+                document.getElementById("stat-sales-today").innerText = '฿' + salesToday.toLocaleString();
+                document.getElementById("stat-commission-total").innerText = '฿' + totalCommission.toLocaleString(undefined, {minimumFractionDigits: 2});
+                document.getElementById("stat-commission-today").innerText = '฿' + commissionToday.toLocaleString(undefined, {minimumFractionDigits: 2});
+            });
+
+            // 3. Withdrawals (Count & Amount)
+            db.collection("withdrawals").onSnapshot(snap => {
+                let totalWithdraw = 0;
+                let withdrawCount = 0;
+                let withdrawTodayCount = 0;
+
+                snap.forEach(doc => {
+                    const data = doc.data();
+                    const amount = parseFloat(data.amount) || 0;
+                    // เช็ควันที่ (timestamp ISO string)
+                    const isToday = data.timestamp && data.timestamp.includes(todayISO);
+
+                    if (data.status === 'approved') {
+                        totalWithdraw += amount;
+                    }
+                    withdrawCount++;
+                    if(isToday) withdrawTodayCount++;
+                });
+
+                document.getElementById("stat-withdraw-total").innerText = '฿' + totalWithdraw.toLocaleString(undefined, {minimumFractionDigits: 2});
+                document.getElementById("stat-withdraw-count").innerText = withdrawCount.toLocaleString();
+                document.getElementById("stat-withdraw-today-count").innerText = withdrawTodayCount;
+                document.getElementById("stat-withdraw-users-today").innerText = withdrawTodayCount; // สมมติว่า 1 รายการ = 1 คน
+            });
+
+            // 4. Recharges (Deposit)
+            // 4. Recharges (Deposit & People Count)
+db.collection("recharges").onSnapshot(snap => {
+    let totalDeposit = 0;
+    let depositToday = 0;
+    
+    // สร้างตัวเก็บรายชื่อคน (Set จะช่วยตัดชื่อซ้ำออกให้อัตโนมัติ)
+    let allDepositUsers = new Set();
+    let todayDepositUsers = new Set();
+    let yesterdayDepositUsers = new Set();
+
+    // หาวันที่ของเมื่อวาน (Yesterday)
+    const yesterdayDate = new Date(today);
+    yesterdayDate.setDate(yesterdayDate.getDate() - 1);
+    // แปลงเป็นรูปแบบ YYYY-MM-DD เพื่อเทียบกับ Timestamp
+    const yesterdayISO = yesterdayDate.toISOString().split('T')[0]; 
+
+    snap.forEach(doc => {
+        const data = doc.data();
+        const amount = parseFloat(data.amount) || 0;
+        
+        // ตรวจสอบสถานะต้องสำเร็จเท่านั้น
+        if (data.status === 'approved') {
+            // 1. คำนวณยอดเงิน (เดิม)
+            totalDeposit += amount;
+            if (data.timestamp && data.timestamp.includes(todayISO)) {
+                depositToday += amount;
+            }
+
+            // 2. คำนวณจำนวนคน (ใหม่) - เช็คจาก user_id
+            if (data.user_id) {
+                allDepositUsers.add(data.user_id); // เก็บคนทั้งหมด
+
+                if (data.timestamp && data.timestamp.includes(todayISO)) {
+                    todayDepositUsers.add(data.user_id); // เก็บคนเติมวันนี้
+                }
+                if (data.timestamp && data.timestamp.includes(yesterdayISO)) {
+                    yesterdayDepositUsers.add(data.user_id); // เก็บคนเติมเมื่อวาน
+                }
+            }
+        }
+    });
+
+    // แสดงผลยอดเงิน
+    document.getElementById("stat-deposit-total").innerText = '฿' + totalDeposit.toLocaleString(undefined, {minimumFractionDigits: 2});
+    document.getElementById("stat-deposit-today").innerText = '฿' + depositToday.toLocaleString(undefined, {minimumFractionDigits: 2});
+
+    // แสดงผลจำนวนคน (ใช้ .size เพื่อนับจำนวนใน Set)
+    document.getElementById("stat-deposit-users-total").innerText = allDepositUsers.size.toLocaleString();
+    document.getElementById("stat-deposit-users-today").innerText = todayDepositUsers.size.toLocaleString();
+    document.getElementById("stat-deposit-users-yesterday").innerText = yesterdayDepositUsers.size.toLocaleString();
+});
+        }
+
+        // เริ่มโหลดข้อมูล
+        fetchDashboardData();
+    </script>
+</body>
+</html>

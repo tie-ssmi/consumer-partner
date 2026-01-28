@@ -1,0 +1,23 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <script>
+    // --- ระบบป้องกันการเข้าถึง (Security Check) ---
+    // ถ้าในเครื่องไม่มีข้อมูลว่า 'admin_logged_in' เป็น 'true'
+    if (localStorage.getItem('admin_logged_in') !== 'true') {
+        // ให้ดีดกลับไปที่หน้า Login ทันที (ถอยโฟลเดอร์ออกมา 1 ขั้น แล้วเข้า admin_login)
+        window.location.href = '../admin_login/index.html';
+    }
+</script>
+    <meta charset="UTF-8"><title>Transaction</title><link rel="stylesheet" href="admin_style.css"><script src="https://cdn.tailwindcss.com"></script><link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"></head>
+<body>
+    <script src="admin_ui.js"></script>
+    <script>
+        renderAdminUI('trading', 'control');
+        document.getElementById('main-content').innerHTML = `
+            <div class="px-4 py-3 bg-white border-b mb-4 shadow-sm"><span class="text-gray-600 font-bold">ควบคุมธุรกรรม</span></div>
+            <div class="bg-white rounded shadow p-6 border-t-2 border-[#d2d6de]"><label class="block text-xs font-bold text-green-600 mb-1">เลขบัญชี</label><input type="text" value="TRDL6jy..." class="w-full border p-2 rounded text-xs bg-gray-50"></div>
+        `;
+    </script>
+</body>
+</html>

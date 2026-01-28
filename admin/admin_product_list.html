@@ -1,0 +1,253 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+
+    <script>
+    // --- ระบบป้องกันการเข้าถึง (Security Check) ---
+    // ถ้าในเครื่องไม่มีข้อมูลว่า 'admin_logged_in' เป็น 'true'
+    if (localStorage.getItem('admin_logged_in') !== 'true') {
+        // ให้ดีดกลับไปที่หน้า Login ทันที (ถอยโฟลเดอร์ออกมา 1 ขั้น แล้วเข้า admin_login)
+        window.location.href = '../admin_login/index.html';
+    }
+</script>
+    <meta charset="UTF-8">
+    <title>Admin - Product List</title>
+    <link rel="stylesheet" href="admin_style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    
+    <style> .table-wrapper { overflow-x: auto; white-space: nowrap; } th, td { padding: 12px 10px; font-size: 11px; vertical-align: middle; } </style>
+</head>
+<body>
+    <script src="admin_ui.js"></script>
+    <script src="firebase_setup.js"></script> 
+
+    <script>
+        renderAdminUI('trading', 'plist');
+
+        document.getElementById('main-content').innerHTML = `
+            <div class="px-4 py-3 flex justify-between items-center bg-white border-b mb-4 shadow-sm">
+                <span class="text-gray-600 font-bold">การจัดการผลิตภัณฑ์</span>
+                <button onclick="openModal('add')" class="bg-[#00a65a] text-white px-3 py-1 rounded text-xs hover:bg-[#008d4c]">
+                    <i class="fa-solid fa-plus mr-1"></i> เพิ่มสินค้า
+                </button>
+            </div>
+            
+            <div class="bg-white p-4 rounded shadow border-t-2 border-[#d2d6de] mb-4 flex gap-2 items-center">
+                <span class="text-xs text-gray-600 font-bold mr-2">ค้นหา</span>
+                <input type="text" id="searchInput" placeholder="ชื่อผลิตภัณฑ์..." class="border px-2 py-1 text-xs rounded w-48">
+                <button onclick="fetchProducts()" class="bg-white border px-3 py-1 rounded text-xs hover:bg-gray-50">ค้นหา</button>
+            </div>
+
+            <div class="bg-white rounded shadow border-t-2 border-[#d2d6de] table-wrapper custom-scroll">
+                <table class="w-full text-left">
+                    <thead class="bg-gray-50 border-b text-gray-600">
+                        <tr>
+                            <th class="w-10">Img</th> <th>รหัส</th>
+                            <th>หมวดหมู่</th>
+                            <th>ชื่อผลิตภัณฑ์</th>
+                            <th class="text-right">ราคา</th>
+                            <th>เพิ่มเวลา</th>
+                            <th class="text-center">สถานะ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="product-body"><tr><td colspan="7" class="text-center p-4">กำลังโหลด...</td></tr></tbody>
+                </table>
+            </div>
+
+            <div id="productModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50 backdrop-blur-sm">
+                <div class="bg-white rounded shadow-lg w-96 p-6">
+                    <h2 id="modalTitle" class="text-lg font-bold mb-4 text-gray-700">เพิ่มสินค้า</h2>
+                    <input type="hidden" id="editDocId"> 
+                    
+                    <div class="space-y-3">
+                        <div class="flex gap-2">
+                            <div class="w-1/3">
+                                <label class="block text-xs text-gray-500 mb-1">รหัส (Auto)</label>
+                                <input type="text" id="inpId" class="w-full border p-2 rounded text-xs bg-gray-100" disabled>
+                            </div>
+                            <div class="w-2/3">
+                                <label class="block text-xs text-gray-500 mb-1">หมวดหมู่</label>
+                                <select id="inpCategory" class="w-full border p-2 rounded text-xs bg-white focus:outline-none focus:border-[#3c8dbc]">
+                                    <option value="">กำลังโหลด...</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">ชื่อสินค้า</label>
+                            <textarea id="inpName" class="w-full border p-2 rounded text-xs" rows="2"></textarea>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">ลิงก์รูปภาพ (Image URL)</label>
+                            <input type="text" id="inpImage" class="w-full border p-2 rounded text-xs" placeholder="https://example.com/pic.jpg">
+                            <p class="text-[9px] text-gray-400 mt-1">*คลิกขวาที่รูปในเน็ตเลือก 'Copy Image Address' แล้วมาวาง</p>
+                        </div>
+
+                        <div class="flex gap-2">
+                            <div class="w-2/3">
+                                <label class="block text-xs text-gray-500 mb-1">ราคา</label>
+                                <input type="number" id="inpPrice" class="w-full border p-2 rounded text-xs" placeholder="0.00">
+                            </div>
+                            <div class="w-1/3">
+                                <label class="block text-xs text-gray-500 mb-1">หน่วย</label>
+                                <input type="text" id="inpUnit" class="w-full border p-2 rounded text-xs" placeholder="บาท">
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end gap-2 mt-6">
+                        <button onclick="closeModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded text-xs font-bold">ยกเลิก</button>
+                        <button onclick="saveData()" class="px-4 py-2 bg-[#00a65a] text-white rounded text-xs font-bold shadow">บันทึก</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        let allProducts = [];
+        let categoryList = []; 
+
+        function fetchProducts() {
+            const tbody = document.getElementById('product-body');
+            const search = document.getElementById('searchInput').value.toLowerCase();
+            
+            if (!window.db) return setTimeout(fetchProducts, 500);
+            fetchCategories();
+
+            db.collection("products").get().then((snap) => {
+                allProducts = [];
+                snap.forEach(d => allProducts.push({docId: d.id, ...d.data()}));
+                allProducts.sort((a,b) => a.id - b.id);
+
+                const filtered = allProducts.filter(p => p.name.toLowerCase().includes(search));
+
+                if (filtered.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="7" class="text-center p-4">ไม่พบข้อมูล</td></tr>';
+                    return;
+                }
+
+                tbody.innerHTML = '';
+                filtered.forEach(p => {
+                    const pStr = JSON.stringify(p).replace(/"/g, '&quot;');
+                    
+                    // ✅ แสดงรูปภาพ (ถ้ามี)
+                    let imgDisplay = '<div class="w-8 h-8 bg-gray-200 rounded flex items-center justify-center text-gray-400"><i class="fa-solid fa-image"></i></div>';
+                    if (p.image && p.image.startsWith('http')) {
+                        imgDisplay = `<img src="${p.image}" class="w-8 h-8 rounded object-cover border" onclick="window.open('${p.image}')" style="cursor:pointer;">`;
+                    }
+
+                    const row = `
+                        <tr class="hover:bg-gray-50 border-b">
+                            <td>${imgDisplay}</td>
+                            <td class="text-gray-500">${p.id}</td>
+                            <td><span class="bg-gray-100 text-gray-600 px-2 py-0.5 rounded text-[10px]">${p.category}</span></td>
+                            <td class="w-1/3 truncate text-xs font-bold text-gray-700" title="${p.name}">${p.name}</td>
+                            <td class="text-right font-bold text-[#d9534f]">${p.price.toFixed(2)} ${p.unit}</td>
+                            <td class="text-gray-400 text-[10px]">${p.time}</td>
+                            <td class="text-center flex gap-1 justify-center">
+                                <button onclick="openModal('edit', ${pStr})" class="bg-[#f39c12] text-white px-2 py-1 rounded text-[10px] hover:bg-yellow-600"><i class="fa-solid fa-pen"></i></button>
+                                <button onclick="deleteItem('${p.docId}')" class="bg-[#dd4b39] text-white px-2 py-1 rounded text-[10px] hover:bg-red-700"><i class="fa-solid fa-trash"></i></button>
+                            </td>
+                        </tr>
+                    `;
+                    tbody.insertAdjacentHTML('beforeend', row);
+                });
+            });
+        }
+
+        function fetchCategories() {
+            db.collection("categories").get().then((snap) => {
+                categoryList = [];
+                snap.forEach(doc => { categoryList.push(doc.data().name); });
+                categoryList.sort();
+            });
+        }
+
+        window.openModal = async (mode, data = null) => {
+            const modal = document.getElementById('productModal');
+            const title = document.getElementById('modalTitle');
+            const catSelect = document.getElementById('inpCategory');
+
+            catSelect.innerHTML = '<option value="">-- เลือกหมวดหมู่ --</option>';
+            if (categoryList.length === 0) await fetchCategories();
+            categoryList.forEach(catName => {
+                const option = document.createElement('option');
+                option.value = catName; option.innerText = catName;
+                catSelect.appendChild(option);
+            });
+
+            // เคลียร์ค่า
+            document.getElementById('editDocId').value = '';
+            document.getElementById('inpName').value = '';
+            document.getElementById('inpPrice').value = '';
+            document.getElementById('inpUnit').value = '';
+            document.getElementById('inpImage').value = ''; // ✅ เคลียร์ช่องรูป
+
+            if (mode === 'add') {
+                title.innerText = 'เพิ่มสินค้าใหม่';
+                const maxId = allProducts.length > 0 ? Math.max(...allProducts.map(p => p.id)) : 0;
+                document.getElementById('inpId').value = maxId + 1;
+                catSelect.value = "";
+            } else {
+                title.innerText = 'แก้ไขสินค้า';
+                document.getElementById('editDocId').value = data.docId;
+                document.getElementById('inpId').value = data.id;
+                document.getElementById('inpName').value = data.name;
+                document.getElementById('inpPrice').value = data.price;
+                document.getElementById('inpUnit').value = data.unit;
+                document.getElementById('inpImage').value = data.image || ''; // ✅ ดึงรูปมาแสดง
+                catSelect.value = data.category;
+            }
+            modal.classList.remove('hidden');
+        }
+
+        window.closeModal = () => { document.getElementById('productModal').classList.add('hidden'); }
+
+        window.saveData = async () => {
+            const docId = document.getElementById('editDocId').value;
+            const category = document.getElementById('inpCategory').value;
+            const name = document.getElementById('inpName').value;
+            const image = document.getElementById('inpImage').value; // ✅ รับค่ารูป
+            const price = Number(document.getElementById('inpPrice').value);
+            const unit = document.getElementById('inpUnit').value;
+
+            if (category === "") return alert("กรุณาเลือกหมวดหมู่สินค้า!");
+            if (name.trim() === "") return alert("กรุณากรอกชื่อสินค้า!");
+
+            const now = new Date();
+            const timeStr = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' }) + ', ' + now.toLocaleTimeString('th-TH');
+
+            const dataObj = {
+                id: Number(document.getElementById('inpId').value),
+                category: category,
+                name: name,
+                image: image, // ✅ บันทึกลง DB
+                price: price,
+                unit: unit,
+                time: timeStr
+            };
+
+            try {
+                if (docId) { await db.collection("products").doc(docId).update(dataObj); } 
+                else { await db.collection("products").add(dataObj); }
+                closeModal();
+                fetchProducts();
+                alert("บันทึกข้อมูลเรียบร้อย!");
+            } catch (e) { alert("เกิดข้อผิดพลาด: " + e.message); }
+        }
+
+        window.deleteItem = async (docId) => {
+            if (confirm("ยืนยันการลบสินค้านี้?")) {
+                await db.collection("products").doc(docId).delete();
+                fetchProducts();
+            }
+        }
+
+        setTimeout(fetchProducts, 500);
+    </script>
+</body>
+</html>

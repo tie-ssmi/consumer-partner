@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<script>
+    // --- ระบบป้องกันการเข้าถึง (Security Check) ---
+    // ถ้าในเครื่องไม่มีข้อมูลว่า 'admin_logged_in' เป็น 'true'
+    if (localStorage.getItem('admin_logged_in') !== 'true') {
+        // ให้ดีดกลับไปที่หน้า Login ทันที (ถอยโฟลเดอร์ออกมา 1 ขั้น แล้วเข้า admin_login)
+        window.location.href = '../admin_login/index.html';
+    }
+</script>
+
+    <meta charset="UTF-8">
+    <title>Admin - จัดการการเติมเงิน</title>
+    <link rel="stylesheet" href="admin_style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <style> 
+        .table-wrapper { overflow-x: auto; white-space: nowrap; padding-bottom: 20px; } 
+        th, td { padding: 14px 10px; font-size: 11px; vertical-align: middle; border-bottom: 1px solid #f3f4f6; }
+        th { background-color: #f9fafb; font-weight: 600; color: #4b5563; }
+        tr:hover { background-color: #f8fafc; transition: 0.2s; }
+        .badge-pending { background-color: #fff7ed; color: #c2410c; }
+        .badge-approved { background-color: #f0fdf4; color: #15803d; }
+        .badge-rejected { background-color: #fef2f2; color: #b91c1c; }
+        .btn-action { padding: 5px 10px; border-radius: 6px; color: white; font-size: 10px; cursor: pointer; }
+        .btn-approve { background-color: #10b981; } .btn-reject { background-color: #ef4444; }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans">
+    <script src="admin_ui.js"></script>
+    <script src="firebase_setup.js"></script> 
+
+    <script>
+        renderAdminUI('finance', 'recharge'); 
+
+        document.getElementById('main-content').innerHTML = `
+            <div class="bg-white p-5 shadow-sm border-b flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold text-gray-800">💰 จัดการการเติมเงิน (Recharge)</h2>
+                <button onclick="fetchRecharges()" class="bg-indigo-50 text-indigo-600 px-4 py-2 rounded text-xs font-bold hover:bg-indigo-100"><i class="fa-solid fa-rotate"></i> รีเฟรช</button>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4 mx-4">
+                <div class="flex flex-wrap gap-4 items-center">
+                    <select id="filter-status" onchange="renderTable()" class="border px-3 py-2 text-xs rounded-lg"><option value="all">ทั้งหมด</option><option value="pending">รอตรวจสอบ</option><option value="approved">อนุมัติแล้ว</option><option value="rejected">ปฏิเสธ</option></select>
+                    <input type="text" id="search-input" onkeyup="renderTable()" placeholder="ค้นหา..." class="border pl-9 pr-3 py-2 text-xs rounded-lg w-full">
+                </div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 mx-4 overflow-hidden">
+                <div class="table-wrapper custom-scroll">
+                    <table class="w-full text-left">
+                        <thead>
+                            <tr>
+                                <th class="pl-6">Order ID</th>
+                                <th>ผู้ใช้งาน</th>
+                                <th>ระดับ</th>
+                                <th class="text-right">จำนวนเงิน (บาท)</th>
+                                <th class="text-center">ประเภท</th>
+                                <th>เวลาทำรายการ</th>
+                                <th class="text-center">สถานะ</th>
+                                <th class="text-center pr-6">จัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recharge-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        let allRecharges = [];
+        function formatDateTime(isoString) { if(!isoString) return "-"; const d = new Date(isoString); return `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()+543} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
+
+        function fetchRecharges() {
+            if (!window.db) return setTimeout(fetchRecharges, 1000);
+            db.collection("recharges").onSnapshot((snapshot) => {
+                allRecharges = [];
+                snapshot.forEach(doc => allRecharges.push({ docId: doc.id, ...doc.data() }));
+                renderTable();
+            });
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('recharge-body');
+            const statusFilter = document.getElementById('filter-status').value;
+            const searchText = document.getElementById('search-input').value.toLowerCase();
+            allRecharges.sort((a, b) => {
+                if (a.status === 'pending' && b.status !== 'pending') return -1;
+                if (a.status !== 'pending' && b.status === 'pending') return 1;
+                return new Date(b.timestamp) - new Date(a.timestamp);
+            });
+            let html = '';
+            allRecharges.forEach(r => {
+                if (statusFilter !== 'all' && r.status !== statusFilter) return;
+                if (searchText && !r.username.toLowerCase().includes(searchText)) return;
+                const amount = parseFloat(r.amount);
+                let statusBadge, actions;
+                if (r.status === 'pending') {
+                    statusBadge = '<span class="badge badge-pending p-1 rounded text-xs">รอตรวจสอบ</span>';
+                    actions = `<button onclick="processRecharge('${r.docId}', 'approve', ${amount}, '${r.user_id}', '${r.username}')" class="btn-action btn-approve mr-1">อนุมัติ</button><button onclick="processRecharge('${r.docId}', 'reject')" class="btn-action btn-reject">ปฏิเสธ</button>`;
+                } else if (r.status === 'approved') { statusBadge = '<span class="badge badge-approved p-1 rounded text-xs">อนุมัติแล้ว</span>'; actions = '-'; }
+                else { statusBadge = '<span class="badge badge-rejected p-1 rounded text-xs">ปฏิเสธ</span>'; actions = '-'; }
+                html += `<tr class="border-b hover:bg-gray-50"><td class="pl-6 font-mono text-xs text-gray-500">${r.order_id}</td><td><div class="font-bold text-gray-700 text-sm">${r.username}</div><div class="text-[10px] text-gray-400">${r.phone||'-'}</div></td><td><span class="bg-purple-50 text-purple-700 px-2 py-0.5 rounded text-[10px] font-bold">${r.level||'Top-up'}</span></td><td class="text-right font-bold text-gray-800 text-sm">฿${amount.toLocaleString()}</td><td class="text-center text-[10px]">${r.type||'เติมเงิน'}</td><td class="text-xs text-gray-500">${formatDateTime(r.timestamp)}</td><td class="text-center">${statusBadge}</td><td class="text-center pr-6 flex justify-center py-3">${actions}</td></tr>`;
+            });
+            tbody.innerHTML = html || '<tr><td colspan="8" class="text-center p-12 text-gray-400">ไม่พบข้อมูล</td></tr>';
+        }
+
+        async function processRecharge(docId, action, amount = 0, userId = null, username = null) {
+            let confirmMsg = action === 'approve' ? `ยืนยันการอนุมัติยอด ฿${amount}?` : "ยืนยันการปฏิเสธ?";
+            if(confirm(confirmMsg)) {
+                try {
+                    let targetUserRef = null;
+                    if (action === 'approve') {
+                        let docSnap = await db.collection("users").doc(userId).get();
+                        if (docSnap.exists) targetUserRef = docSnap.ref;
+                        else {
+                            let querySnap = await db.collection("users").where("id", "==", userId).limit(1).get();
+                            if (!querySnap.empty) targetUserRef = querySnap.docs[0].ref;
+                            else if (username) {
+                                let userQuery = await db.collection("users").where("username", "==", username).limit(1).get();
+                                if (!userQuery.empty) targetUserRef = userQuery.docs[0].ref;
+                            }
+                        }
+                        if (!targetUserRef) { alert("ไม่พบ User ID นี้ในระบบ"); return; }
+                    }
+                    const status = action === 'approve' ? 'approved' : 'rejected';
+                    await db.collection("recharges").doc(docId).update({ status: status });
+                    if (action === 'approve' && targetUserRef) {
+                        await db.runTransaction(async (transaction) => {
+                            const userDoc = await transaction.get(targetUserRef);
+                            const currentBal = parseFloat(userDoc.data().balance) || 0;
+                            transaction.update(targetUserRef, { balance: currentBal + parseFloat(amount) });
+                        });
+                        await db.collection("notifications").add({ user_id: targetUserRef.id, title: '💰 เติมเงินสำเร็จ', message: `ยอดเงิน ฿${amount.toLocaleString()} เข้าสู่กระเป๋าเรียบร้อยแล้ว`, read: false, timestamp: new Date().toISOString() });
+                    }
+                    alert("ดำเนินการเรียบร้อย!");
+                } catch(e) { alert("Error: " + e.message); }
+            }
+        }
+        fetchRecharges();
+    </script>
+</body>
+</html>
