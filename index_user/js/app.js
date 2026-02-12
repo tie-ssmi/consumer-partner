@@ -75,7 +75,7 @@ var heartbeatInterval = null;
 // ✅ ฟังก์ชันดึงค่าตั้งค่า (เลือกใช้ระหว่าง VIP หรือ ค่าที่ Admin ตั้งให้ส่วนตัว)
 function getEffectiveConfig() {
     // 1. เอาค่ามาตรฐานจากระดับ VIP มาตั้งต้น
-    let cfg = currentLevelConfig ? { ...currentLevelConfig } : { rate: 0, orders: 0, min_withdraw: 0, withdraw_limit: 0 };
+    let cfg = currentLevelConfig ? { ...currentLevelConfig } : { rate: 0, orders: 0, min_withdraw_amount: 0, withdraw_limit: 0 };
 
     if (userData) {
         // 2. เช็คว่ามีค่า "เป้าหมายคำสั่งซื้อ" พิเศษไหม
