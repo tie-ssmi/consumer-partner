@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title data-i18n="title_login">Consumer-Login</title>
+<script>
+    const link = document.createElement('link');
+    link.rel = 'icon';
+    link.href = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAABwAAAAaCAMAAACTisy7AAAAKlBMVEVHcEx4GUR3GkV3IUd4GER4HkZ4OFJ3Ikh4IUh4GUV3Ikd4G0V3GUV4F0Q+WLQcAAAADXRSTlMAq88+9WYMKk/nG4q7F5KB4wAAAJ9JREFUKJGVkksShCAMRAmCQID7X3eCUuZDNtMr24cJ3WUI/+iClhpcLovzVbxPluang0Zms9l9U6pqCAqO510Z67HoqXtu3iY7kBeVcywfj1XBTFBYGZNcCLe0RZinQXW2aCbCwbJ9jU59J+e51GbN9AWKXvC9RsKd2NSWIQJdvKp1RrIaK5TLrTgGnpATezv7Zt2DYXAXjipl8v/KUz+skhAyQOCYWgAAAABJRU5ErkJggg=="; 
+    document.head.appendChild(link);
+</script>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;800&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    
+    <script src="js/languages.js"></script>
+
+    <style>
+        * { font-family: 'Kanit', sans-serif; }
+        body { background-color: #f3f4f6; }
+        .red-header {
+            background: linear-gradient(135deg, #d00000 0%, #ff0000 100%);
+            height: 280px;
+            border-bottom-left-radius: 40px;
+            border-bottom-right-radius: 40px;
+            position: relative;
+            overflow: hidden;
+        }
+        .red-header::before {
+            content: '';
+            position: absolute;
+            top: -50%;
+            left: -20%;
+            width: 200%;
+            height: 200%;
+            background: radial-gradient(circle, rgba(255,255,255,0.1) 0%, transparent 60%);
+            transform: rotate(30deg);
+            z-index: 0;
+        }
+        .input-group {
+            border-bottom: 1px solid #e5e7eb;
+            padding-bottom: 5px;
+            transition: 0.3s;
+        }
+        .input-group:focus-within {
+            border-bottom: 1px solid #d00000;
+        }
+        input:focus, select:focus { outline: none; }
+        
+        @keyframes popIn {
+            0% { opacity: 0; transform: scale(0.9); }
+            100% { opacity: 1; transform: scale(1); }
+        }
+        .modal-animate { animation: popIn 0.2s ease-out forwards; }
+    </style>
+</head>
+<body class="flex justify-center min-h-screen">
+
+    <div class="w-full max-w-md bg-white shadow-2xl relative flex flex-col min-h-screen">
+        <div class="red-header w-full flex flex-col px-6 pt-10 pb-6">
+            
+            <div class="flex justify-between items-center text-white relative z-10 shrink-0">
+                <i class="fa-solid hover:scale-110 transition cursor-pointer" onclick="history.back()"></i>
+                <i class="fa-solid fa-globe text-xl cursor-pointer hover:opacity-80 hover:scale-110 transition" onclick="openLangModal()"></i>
+            </div>
+            
+            <div class="flex-1 flex items-center justify-center relative z-10">
+                <h1 class="text-white text-4xl font-extrabold tracking-widest drop-shadow-md">CONSUMER</h1>
+            </div>
+            <div class="flex-1 flex items-center justify-center relative z-10">
+                <h1 class="text-white text-4xl font-extrabold tracking-widest drop-shadow-md"></h1>
+            </div>
+
+            <div class="relative z-10 shrink-0">
+                <h1 class="text-white text-3xl font-bold ml-2" data-i18n="login_header">login</h1>
+            </div>
+        </div>
+
+        <div class="px-6 -mt-24 relative z-10 flex-1">
+            <div class="bg-white rounded-2xl shadow-lg p-8 space-y-6">
+                <div>
+                    <label class="block text-sm text-gray-700 mb-2 font-medium" data-i18n="mobile_label">Mobile number*</label>
+                    <div class="flex items-center input-group pb-2">
+                        <div class="relative mr-2">
+                            <select id="country-code" class="bg-transparent text-sm font-bold text-gray-700 cursor-pointer appearance-none pr-4 focus:outline-none">
+                                <option value="+66">TH +66</option>
+                                <option value="+856">LA +856</option>
+                                <option value="+95">MM +95</option>
+                                <option value="+84">VN +84</option>
+                                <option value="+855">KH +855</option>
+                                <option value="+60">MY +60</option>
+                                <option value="+99">TEST +99</option>
+                            </select>
+                            <i class="fa-solid fa-chevron-down text-[10px] text-gray-400 absolute right-0 top-1.5 pointer-events-none"></i>
+                        </div>
+                        <div class="w-[1px] h-5 bg-gray-300 mx-2"></div>
+                        <input type="tel" id="phone" class="flex-1 bg-transparent px-2 text-gray-800 text-sm font-medium" placeholder="ระบุเบอร์โทรศัพท์" data-i18n="ph_mobile">
+                    </div>
+                </div>
+
+                <div class="pt-2">
+                    <label class="block text-sm text-gray-700 mb-2 font-medium" data-i18n="password_label">Login password*</label>
+                    <div class="input-group pb-2">
+                        <input type="password" id="password" class="w-full bg-transparent px-2 text-gray-800 tracking-widest text-sm" placeholder="••••••" data-i18n="ph_pass">
+                    </div>
+                </div>
+
+                <button id="btn-login" onclick="handleLogin()" class="w-full bg-[#e60000] text-white py-3.5 rounded-lg font-bold text-lg shadow-md hover:bg-[#cc0000] active:scale-95 transition mt-4" data-i18n="login_btn">
+    login
+</button>
+
+                <a href="register.html" class="block w-full">
+                    <button class="w-full bg-white border border-gray-200 text-gray-500 py-3.5 rounded-lg font-medium hover:bg-gray-50 transition text-sm" data-i18n="register_btn">
+                        to register
+                    </button>
+                </a>
+            </div>
+        </div>
+
+        <div class="py-8 flex justify-center pb-12">
+            <div onclick="openContact()" class="w-12 h-12 bg-gray-800 rounded-full flex items-center justify-center border-4 border-gray-200 shadow-md cursor-pointer hover:scale-110 transition">
+    <i class="fa-solid fa-headset text-white text-lg"></i>
+</div>
+        </div>
+    </div>
+
+    <div id="custom-modal" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-[150] backdrop-blur-sm">
+        <div class="bg-white rounded-2xl w-72 p-6 text-center shadow-2xl modal-animate relative">
+            <div id="modal-icon" class="mb-4 text-4xl"></div>
+            <h3 id="modal-title" class="text-lg font-bold text-gray-800 mb-2"></h3>
+            <p id="modal-msg" class="text-sm text-gray-500 mb-6"></p>
+            <button onclick="closeModal()" class="w-full bg-[#d00000] text-white py-2.5 rounded-xl font-bold shadow hover:bg-[#b00000] transition" data-i18n="confirm">
+                ตกลง
+            </button>
+        </div>
+    </div>
+
+    <script src="js/firebase_config.js"></script>
+
+    <script>
+        if (localStorage.getItem('currentUser')) {
+            window.location.href = '../index.html';
+        }
+
+        // --- Multi-Language Logic ---
+        function changeLanguage(langCode) {
+            if (typeof translations === 'undefined' || !translations[langCode]) return;
+
+            localStorage.setItem('selectedLang', langCode);
+
+            document.querySelectorAll('[data-i18n]').forEach(el => {
+                const key = el.getAttribute('data-i18n');
+                if (translations[langCode][key]) {
+                    if(el.tagName === 'INPUT' || el.tagName === 'TEXTAREA') {
+                        el.placeholder = translations[langCode][key];
+                    } else {
+                        el.innerHTML = translations[langCode][key];
+                    }
+                }
+            });
+
+            const modal = document.getElementById('modal-language');
+            if(modal) {
+                modal.classList.add('hidden');
+                modal.classList.remove('flex');
+            }
+        }
+
+        function getTrans(key) {
+            const lang = localStorage.getItem('selectedLang') || 'th';
+            if (typeof translations !== 'undefined' && translations[lang] && translations[lang][key]) {
+                return translations[lang][key];
+            }
+            return key; 
+        }
+
+        function initLanguage() {
+            const savedLang = localStorage.getItem('selectedLang') || 'th';
+            changeLanguage(savedLang);
+        }
+
+        function openLangModal() {
+            if (!document.getElementById('modal-language')) {
+                const modalHtml = `
+                <div id="modal-language" class="fixed inset-0 z-[200] bg-black/60 hidden items-center justify-center p-4 font-sans backdrop-blur-sm">
+                    <div class="bg-white rounded-xl w-full max-w-xs overflow-hidden animate-[scaleIn_0.2s_ease-out]">
+                        <div class="bg-[#DC2626] text-white p-4 flex justify-between items-center">
+                            <h3 class="font-bold text-lg" data-i18n="lang_select">Select Language</h3>
+                            <button onclick="document.getElementById('modal-language').classList.add('hidden');document.getElementById('modal-language').classList.remove('flex')" class="text-white hover:text-gray-200">
+                                <i class="fa-solid fa-xmark text-xl"></i>
+                            </button>
+                        </div>
+                        <div class="divide-y divide-gray-100 max-h-[60vh] overflow-y-auto custom-scroll">
+                            <div onclick="changeLanguage('th')" class="p-3 flex items-center gap-3 hover:bg-gray-50 cursor-pointer"><span class="text-2xl">🇹🇭</span> <span class="text-gray-700 font-bold text-sm">ภาษาไทย</span></div>
+                            <div onclick="changeLanguage('en')" class="p-3 flex items-center gap-3 hover:bg-gray-50 cursor-pointer"><span class="text-2xl">🇬🇧</span> <span class="text-gray-700 font-bold text-sm">English</span></div>
+                            <div onclick="changeLanguage('mm')" class="p-3 flex items-center gap-3 hover:bg-gray-50 cursor-pointer"><span class="text-2xl">🇲🇲</span> <span class="text-gray-700 font-bold text-sm">Myanmar</span></div>
+                            <div onclick="changeLanguage('zh')" class="p-3 flex items-center gap-3 hover:bg-gray-50 cursor-pointer"><span class="text-2xl">🇨🇳</span> <span class="text-gray-700 font-bold text-sm">Chinese (中文)</span></div>
+                            <div onclick="changeLanguage('jp')" class="p-3 flex items-center gap-3 hover:bg-gray-50 cursor-pointer"><span class="text-2xl">🇯🇵</span> <span class="text-gray-700 font-bold text-sm">Japanese (日本語)</span></div>
+                            <div onclick="changeLanguage('vn')" class="p-3 flex items-center gap-3 hover:bg-gray-50 cursor-pointer"><span class="text-2xl">🇻🇳</span> <span class="text-gray-700 font-bold text-sm">Vietnamese (Tiếng Việt)</span></div>
+                        </div>
+                    </div>
+                </div>`;
+                document.body.insertAdjacentHTML('beforeend', modalHtml);
+            }
+            const modal = document.getElementById('modal-language');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        // --- Alert Modal Logic ---
+        let onModalClose = null;
+
+        function showModal(title, msg, isSuccess = false, callback = null) {
+            const modal = document.getElementById('custom-modal');
+            const iconEl = document.getElementById('modal-icon');
+            const titleEl = document.getElementById('modal-title');
+            const msgEl = document.getElementById('modal-msg');
+
+            titleEl.innerText = title;
+            msgEl.innerText = msg;
+            onModalClose = callback;
+
+            if (isSuccess) {
+                iconEl.innerHTML = '<i class="fa-solid fa-circle-check text-green-500"></i>';
+            } else {
+                iconEl.innerHTML = '<i class="fa-solid fa-circle-exclamation text-red-500"></i>';
+            }
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        function closeModal() {
+            document.getElementById('custom-modal').classList.add('hidden');
+            document.getElementById('custom-modal').classList.remove('flex');
+            if (onModalClose) {
+                onModalClose();
+                onModalClose = null;
+            }
+        }
+
+        // --- Login Logic ---
+       async function handleLogin() {
+            const countryCode = document.getElementById('country-code').value;
+            let phoneInput = document.getElementById('phone').value.trim();
+            const passwordInput = document.getElementById('password').value.trim();
+
+            if (!phoneInput || !passwordInput) {
+                showModal(getTrans('alert_error'), getTrans('alert_fill_info'));
+                return;
+            }
+
+            if (phoneInput.startsWith('0')) {
+                phoneInput = phoneInput.substring(1);
+            }
+
+            const phoneWithSpace = `${countryCode} ${phoneInput}`;
+            const phoneNoSpace = `${countryCode}${phoneInput}`;
+
+            if (!window.db) { showModal(getTrans('alert_error'), getTrans('alert_connecting')); return; }
+
+            // --- 🟢 เริ่มส่วน Animation ปุ่ม ---
+            const btn = document.getElementById('btn-login');
+            const originalText = btn.innerHTML; // จำข้อความเดิมไว้ (Login)
+            
+            // เปลี่ยนปุ่มเป็นสถานะกำลังโหลด
+            btn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> Processing...';
+            btn.disabled = true; // ห้ามกดซ้ำ
+            btn.classList.add('opacity-70', 'cursor-not-allowed'); // ทำให้ปุ่มดูจางลง
+            // --------------------------------
+
+            try {
+                let snapshot = await window.db.collection("users").where("phone", "==", phoneWithSpace).where("password", "==", passwordInput).get();
+
+                if (snapshot.empty) {
+                    snapshot = await window.db.collection("users").where("phone", "==", phoneNoSpace).where("password", "==", passwordInput).get();
+                }
+
+                if (snapshot.empty) {
+                    const rawInput = document.getElementById('phone').value.trim();
+                    snapshot = await window.db.collection("users").where("username", "==", rawInput).where("password", "==", passwordInput).get();
+                }
+
+                if (!snapshot.empty) {
+                    const doc = snapshot.docs[0];
+                    const userData = { docId: doc.id, ...doc.data() };
+                    
+                    // ✅ เช็คสถานะบล็อก (วางถูกที่แล้ว)
+                    if (userData.account_status === 'blocked') {
+                        // คืนค่าปุ่มให้กดได้ใหม่ (เผื่อเขาจะไปติดต่อแอดมินแล้วกลับมาลองใหม่)
+                        btn.innerHTML = originalText;
+                        btn.disabled = false;
+                        btn.classList.remove('opacity-70', 'cursor-not-allowed');
+
+                        // เปลี่ยนข้อความไทย เป็น getTrans('alert_account_blocked')
+showModal(getTrans('alert_error'), getTrans('alert_account_blocked'));
+                        return; 
+                    }
+                    
+                    localStorage.setItem('currentUser', JSON.stringify(userData));
+                    
+                    // เปลี่ยนปุ่มเป็นสีเขียว หรือข้อความสำเร็จ
+                    btn.innerHTML = '<i class="fa-solid fa-check"></i> Success!';
+                    
+                    showModal(getTrans('alert_success'), `${getTrans('alert_welcome')} ${getTrans('Consumer')}`, true, () => {
+                        window.location.href = '../index.html'; 
+                    });
+
+                } else {
+                    // ❌ กรณี Login ไม่ผ่าน: คืนค่าปุ่มกลับเหมือนเดิม
+                    btn.innerHTML = originalText;
+                    btn.disabled = false;
+                    btn.classList.remove('opacity-70', 'cursor-not-allowed');
+                    
+                    showModal(getTrans('alert_error'), getTrans('alert_login_fail'));
+                }
+
+            } catch (error) {
+                console.error("Login Error:", error);
+                
+                // ❌ กรณี Error: คืนค่าปุ่มกลับเหมือนเดิม
+                btn.innerHTML = originalText;
+                btn.disabled = false;
+                btn.classList.remove('opacity-70', 'cursor-not-allowed');
+                
+                showModal(getTrans('alert_error'), error.message);
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', () => {
+            setTimeout(initLanguage, 100);
+        });
+
+        
+    </script>
+    <script>
+    // ป้องกันคลิกขวา
+    document.addEventListener('contextmenu', event => event.preventDefault());
+
+    // ป้องกันปุ่ม F12, Ctrl+Shift+I, Ctrl+U
+    document.onkeydown = function(e) {
+        if(event.keyCode == 123) { // F12
+            return false;
+        }
+        if(e.ctrlKey && e.shiftKey && e.keyCode == 'I'.charCodeAt(0)) { // Inspect
+            return false;
+        }
+        if(e.ctrlKey && e.keyCode == 'U'.charCodeAt(0)) { // View Source
+            return false;
+        }
+    }
+</script>
+<script>
+        // ... (โค้ด login เดิม) ...
+
+        // ✅ เพิ่มฟังก์ชันเปิด LINE ตรงนี้ครับ
+        async function openContact() {
+            // เช็คว่า Database พร้อมไหม
+            if (!window.db) {
+                alert("กำลังเชื่อมต่อระบบ... กรุณารอสักครู่");
+                return;
+            }
+
+            try {
+                // ดึงข้อมูล Line ID ล่าสุดจาก Database (settings/config)
+                const doc = await window.db.collection('settings').doc('config').get();
+                
+                if (doc.exists && doc.data().line_id_main) {
+                    let lineId = doc.data().line_id_main;
+                    
+                    // ตัด @ ออก (เพราะลิงก์ line.me มักไม่ต้องใช้ @)
+                    if (lineId.startsWith('@')) {
+                        lineId = lineId.substring(1);
+                    }
+                    
+                    // เปิดหน้า LINE
+                    window.location.href = `https://line.me/ti/p/~${lineId}`;
+                } else {
+                    // ถ้าแอดมินยังไม่ได้ตั้งค่า
+                    alert("ยังไม่ได้ตั้งค่าข้อมูลติดต่อ");
+                }
+            } catch (e) {
+                console.error("Contact Error:", e);
+                alert("เกิดข้อผิดพลาดในการเชื่อมต่อ");
+            }
+        }
+    </script>
+    <script>
+        // 1. ฟังก์ชันเปิด LINE
+        async function openContact() {
+            // เช็คว่า Database เชื่อมต่อหรือยัง
+            if (!window.db) {
+                if(typeof firebase !== 'undefined' && firebase.apps.length) {
+                    window.db = firebase.firestore();
+                } else {
+                    alert("ระบบกำลังเชื่อมต่อ... กรุณาลองใหม่อีกครั้ง");
+                    return;
+                }
+            }
+
+            const btn = event.currentTarget;
+            const originalContent = btn.innerHTML;
+            // เปลี่ยนไอคอนหมุนๆ
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin text-white text-lg"></i>';
+
+            try {
+                const doc = await window.db.collection('settings').doc('config').get();
+                
+                if (doc.exists && doc.data().line_id_main) {
+                    let lineId = doc.data().line_id_main;
+                    if (lineId.startsWith('@')) lineId = lineId.substring(1);
+                    
+                    // ✅ แก้ตรงนี้: ใช้ window.open(..., '_blank') เพื่อเปิดแท็บใหม่
+                    window.open(`https://line.me/ti/p/~${lineId}`, '_blank');
+
+                    // ✅ คืนค่าปุ่มกลับเป็นรูปหูฟังทันที (เพราะเราไม่ได้เปลี่ยนหน้าหนีไปไหนแล้ว)
+                    setTimeout(() => {
+                        btn.innerHTML = originalContent;
+                    }, 500);
+
+                } else {
+                    alert("ยังไม่ได้รับข้อมูลช่องทางติดต่อ");
+                    btn.innerHTML = originalContent;
+                }
+            } catch (e) {
+                console.error("Contact Error:", e);
+                alert("เกิดข้อผิดพลาดในการเชื่อมต่อ");
+                btn.innerHTML = originalContent;
+            }
+        }
+
+        // ... (โค้ดป้องกันคลิกขวาด้านล่างปล่อยไว้เหมือนเดิม) ...
+        document.addEventListener('contextmenu', event => event.preventDefault());
+        document.onkeydown = function(e) {
+            if(event.keyCode == 123) return false; 
+            if(e.ctrlKey && e.shiftKey && e.keyCode == 'I'.charCodeAt(0)) return false; 
+            if(e.ctrlKey && e.keyCode == 'U'.charCodeAt(0)) return false; 
+        }
+    </script>
+
+</body>
+</html>

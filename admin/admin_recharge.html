@@ -1,0 +1,387 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<script>
+    // --- ระบบป้องกันการเข้าถึง (Security Check) ---
+    // ถ้าในเครื่องไม่มีข้อมูลว่า 'admin_logged_in' เป็น 'true'
+    if (localStorage.getItem('admin_logged_in') !== 'true') {
+        // ให้ดีดกลับไปที่หน้า Login ทันที (ถอยโฟลเดอร์ออกมา 1 ขั้น แล้วเข้า admin_login)
+        window.location.href = '../admin_login/index.html';
+    }
+</script>
+
+    <meta charset="UTF-8">
+    <title>Admin - จัดการการเติมเงิน</title>
+    <link rel="stylesheet" href="js/admin_style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    <style> 
+        .table-wrapper { overflow-x: auto; white-space: nowrap; padding-bottom: 20px; } 
+        th, td { padding: 14px 10px; font-size: 11px; vertical-align: middle; border-bottom: 1px solid #f3f4f6; }
+        th { background-color: #f9fafb; font-weight: 600; color: #4b5563; }
+        tr:hover { background-color: #f8fafc; transition: 0.2s; }
+        .badge-pending { background-color: #fff7ed; color: #c2410c; }
+        .badge-approved { background-color: #f0fdf4; color: #15803d; }
+        .badge-rejected { background-color: #fef2f2; color: #b91c1c; }
+        .btn-action { padding: 5px 10px; border-radius: 6px; color: white; font-size: 10px; cursor: pointer; }
+        .btn-approve { background-color: #10b981; } .btn-reject { background-color: #ef4444; }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans">
+    <script src="js/admin_ui.js"></script>
+    <script src="js/firebase_setup.js"></script> 
+
+    <script>
+        renderAdminUI('finance', 'recharge'); 
+
+        document.getElementById('main-content').innerHTML = `
+            <div class="bg-white p-5 shadow-sm border-b flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold text-gray-800">💰 จัดการการเติมเงิน (Recharge)</h2>
+                <button onclick="fetchRecharges()" class="bg-indigo-50 text-indigo-600 px-4 py-2 rounded text-xs font-bold hover:bg-indigo-100"><i class="fa-solid fa-rotate"></i> รีเฟรช</button>
+            </div>
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4 mx-4">
+                <div class="flex flex-wrap gap-4 items-center">
+                    <select id="filter-status" onchange="renderTable()" class="border px-3 py-2 text-xs rounded-lg"><option value="all">ทั้งหมด</option><option value="pending">รอตรวจสอบ</option><option value="approved">อนุมัติแล้ว</option><option value="rejected">ปฏิเสธ</option></select>
+                    <input type="text" id="search-input" onkeyup="renderTable()" placeholder="ค้นหา..." class="border pl-9 pr-3 py-2 text-xs rounded-lg w-full">
+                </div>
+            </div>
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 mx-4 overflow-hidden">
+                <div class="table-wrapper custom-scroll">
+                    <table class="w-full text-left">
+                        <thead>
+                            <tr>
+                                <th class="pl-6">Order ID</th>
+                                <th>ผู้ใช้งาน</th>
+                                <th>ระดับ</th>
+                                <th class="text-right">จำนวนเงิน (บาท)</th>
+                                <th class="text-center">ประเภท</th>
+                                <th>เวลาทำรายการ</th>
+                                <th class="text-center">สถานะ</th>
+                                <th class="text-center pr-6">จัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="recharge-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        `;
+
+        let allRecharges = [];
+        function formatDateTime(isoString) { if(!isoString) return "-"; const d = new Date(isoString); return `${d.getDate()}/${d.getMonth()+1}/${d.getFullYear()+543} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`; }
+
+        function fetchRecharges() {
+            if (!window.db) return setTimeout(fetchRecharges, 1000);
+            db.collection("recharges").onSnapshot((snapshot) => {
+                allRecharges = [];
+                snapshot.forEach(doc => allRecharges.push({ docId: doc.id, ...doc.data() }));
+                renderTable();
+            });
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('recharge-body');
+            const statusFilter = document.getElementById('filter-status').value;
+            const searchText = document.getElementById('search-input').value.toLowerCase();
+            allRecharges.sort((a, b) => {
+                if (a.status === 'pending' && b.status !== 'pending') return -1;
+                if (a.status !== 'pending' && b.status === 'pending') return 1;
+                return new Date(b.timestamp) - new Date(a.timestamp);
+            });
+            let html = '';
+            allRecharges.forEach(r => {
+                if (statusFilter !== 'all' && r.status !== statusFilter) return;
+                if (searchText && !r.username.toLowerCase().includes(searchText)) return;
+                const amount = parseFloat(r.amount);
+                let statusBadge, actions;
+                if (r.status === 'pending') {
+                    statusBadge = '<span class="badge badge-pending p-1 rounded text-xs">รอตรวจสอบ</span>';
+                    // เปลี่ยนชื่อฟังก์ชันเป็น confirmProcessRecharge และส่ง parameter ให้ครบ
+// กำหนดตัวแปรไอดีที่จะใช้แสดง
+const displayId = r.order_id || r.docId;
+
+actions = `<button onclick="confirmProcessRecharge('${r.docId}', '${displayId}', 'approve', ${amount}, '${r.user_id}', '${r.username}')" class="btn-action btn-approve mr-1 shadow hover:bg-green-600 transition">อนุมัติ</button>
+           <button onclick="confirmProcessRecharge('${r.docId}', '${displayId}', 'reject', ${amount}, '${r.user_id}', '${r.username}')" class="btn-action btn-reject shadow hover:bg-red-600 transition">ปฏิเสธ</button>`;
+                } else if (r.status === 'approved') { statusBadge = '<span class="badge badge-approved p-1 rounded text-xs">อนุมัติแล้ว</span>'; actions = '-'; }
+                else { statusBadge = '<span class="badge badge-rejected p-1 rounded text-xs">ปฏิเสธ</span>'; actions = '-'; }
+                html += `<tr class="border-b hover:bg-gray-50">
+<td class="pl-6 font-mono text-xs text-gray-500">${r.order_id || r.docId}</td><td><div class="font-bold text-gray-700 text-sm">${r.username}</div><div class="text-[10px] text-gray-400">${r.phone||'-'}</div></td><td><span class="bg-purple-50 text-purple-700 px-2 py-0.5 rounded text-[10px] font-bold">${r.level||'Top-up'}</span></td><td class="text-right font-bold text-gray-800 text-sm">฿${amount.toLocaleString()}</td><td class="text-center text-[10px]">${r.type||'เติมเงิน'}</td><td class="text-xs text-gray-500">${formatDateTime(r.timestamp)}</td><td class="text-center">${statusBadge}</td><td class="text-center pr-6 flex justify-center py-3">${actions}</td></tr>`;
+            });
+            tbody.innerHTML = html || '<tr><td colspan="8" class="text-center p-12 text-gray-400">ไม่พบข้อมูล</td></tr>';
+        }
+
+        async function processRecharge(docId, action, amount = 0, userId = null, username = null) {
+            let confirmMsg = action === 'approve' ? `ยืนยันการอนุมัติยอด ฿${amount}?` : "ยืนยันการปฏิเสธ?";
+            if(confirm(confirmMsg)) {
+                try {
+                    let targetUserRef = null;
+                    if (action === 'approve') {
+                        let docSnap = await db.collection("users").doc(userId).get();
+                        if (docSnap.exists) targetUserRef = docSnap.ref;
+                        else {
+                            let querySnap = await db.collection("users").where("id", "==", userId).limit(1).get();
+                            if (!querySnap.empty) targetUserRef = querySnap.docs[0].ref;
+                            else if (username) {
+                                let userQuery = await db.collection("users").where("username", "==", username).limit(1).get();
+                                if (!userQuery.empty) targetUserRef = userQuery.docs[0].ref;
+                            }
+                        }
+                        if (!targetUserRef) { alert("ไม่พบ User ID นี้ในระบบ"); return; }
+                    }
+                    const status = action === 'approve' ? 'approved' : 'rejected';
+                    await db.collection("recharges").doc(docId).update({ status: status });
+                    if (action === 'approve' && targetUserRef) {
+                        await db.runTransaction(async (transaction) => {
+                            const userDoc = await transaction.get(targetUserRef);
+                            const currentBal = parseFloat(userDoc.data().balance) || 0;
+                            transaction.update(targetUserRef, { balance: currentBal + parseFloat(amount) });
+                        });
+                        await db.collection("notifications").add({ user_id: targetUserRef.id, title: '💰 เติมเงินสำเร็จ', message: `ยอดเงิน ฿${amount.toLocaleString()} เข้าสู่กระเป๋าเรียบร้อยแล้ว`, read: false, timestamp: new Date().toISOString() });
+                    }
+                    alert("ดำเนินการเรียบร้อย!");
+                } catch(e) { alert("Error: " + e.message); }
+            }
+        }
+        fetchRecharges();
+
+       // --- ตัวแปรเก็บข้อมูลชั่วคราว เพื่อรอกดยืนยัน ---
+       // --- ตัวแปรเก็บข้อมูลชั่วคราว ---
+        let pendingRecharge = null;
+
+        // 1. ฟังก์ชันเปิดหน้าต่างยืนยัน (รับ displayId เพิ่มเข้ามาเพื่อโชว์)
+        function confirmProcessRecharge(docId, displayId, action, amount = 0, userId = null, username = null) {
+            pendingRecharge = { docId, displayId, action, amount, userId, username };
+
+            const modal = document.getElementById('modal-recharge-confirm');
+            const iconBg = document.getElementById('rc-icon-bg');
+            const icon = document.getElementById('rc-icon');
+            const btn = document.getElementById('rc-btn-confirm');
+            const title = document.getElementById('rc-title');
+            const desc = document.getElementById('rc-desc');
+
+            // รีเซ็ตปุ่มให้กดได้
+            btn.disabled = false;
+            btn.innerHTML = action === 'approve' ? "อนุมัติ (Approve)" : "ปฏิเสธ (Reject)";
+
+            if (action === 'approve') {
+                // ธีมสีเขียว
+                iconBg.className = "mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-4";
+                icon.className = "fa-solid fa-check text-2xl text-green-600";
+                title.innerText = "ยืนยันการอนุมัติยอดเงิน";
+                
+                // ✅ แสดง Order ID ที่รับมา
+                desc.innerHTML = `
+                    <div class="mb-2 text-xs text-gray-400">รหัสรายการ (Order ID)</div>
+                    <div class="mb-4 font-mono font-bold text-gray-800 bg-gray-100 rounded py-1 px-2 select-all">${displayId}</div>
+                    ต้องการอนุมัติยอด <span class="font-bold text-green-600 text-lg">฿${amount.toLocaleString()}</span><br>
+                    ให้กับผู้ใช้ "${username}" หรือไม่?
+                `;
+                
+                btn.className = "w-full inline-flex justify-center rounded-lg border border-transparent shadow-sm px-4 py-2.5 bg-green-600 text-base font-medium text-white hover:bg-green-700 transition";
+            } else {
+                // ธีมสีแดง
+                iconBg.className = "mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-100 mb-4";
+                icon.className = "fa-solid fa-xmark text-2xl text-red-600";
+                title.innerText = "ยืนยันการปฏิเสธ";
+                
+                desc.innerHTML = `
+                    <div class="mb-2 text-xs text-gray-400">รหัสรายการ (Order ID)</div>
+                    <div class="mb-4 font-mono font-bold text-gray-800 bg-gray-100 rounded py-1 px-2 select-all">${displayId}</div>
+                    ต้องการปฏิเสธคำขอเติมเงินของ "${username}" หรือไม่?<br>
+                    <span class="text-xs text-red-500">*ยอดเงินจะไม่ถูกเพิ่มในบัญชี</span>
+                `;
+                
+                btn.className = "w-full inline-flex justify-center rounded-lg border border-transparent shadow-sm px-4 py-2.5 bg-red-600 text-base font-medium text-white hover:bg-red-700 transition";
+            }
+
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        // 2. ฟังก์ชันทำงานจริง (เมื่อกดปุ่มยืนยัน)
+        async function executeRechargeAction() {
+            if (!pendingRecharge) return;
+
+            const { docId, action, amount, userId, username } = pendingRecharge;
+            const btn = document.getElementById('rc-btn-confirm');
+            
+            btn.innerText = "กำลังประมวลผล...";
+            btn.disabled = true;
+
+            try {
+                let targetUserRef = null;
+
+                // ถ้าเป็นการอนุมัติ ต้องหา User ให้เจอก่อน
+                if (action === 'approve') {
+                    let docSnap = await db.collection("users").doc(userId).get();
+                    if (docSnap.exists) {
+                        targetUserRef = docSnap.ref;
+                    } else {
+                        // ค้นหาสำรองกรณี userId ไม่ตรง
+                        let querySnap = await db.collection("users").where("id", "==", userId).limit(1).get();
+                        if (!querySnap.empty) targetUserRef = querySnap.docs[0].ref;
+                        else if (username) {
+                            let userQuery = await db.collection("users").where("username", "==", username).limit(1).get();
+                            if (!userQuery.empty) targetUserRef = userQuery.docs[0].ref;
+                        }
+                    }
+                    if (!targetUserRef) throw new Error("ไม่พบข้อมูลผู้ใช้งาน (User Not Found)");
+                }
+
+                const status = action === 'approve' ? 'approved' : 'rejected';
+                
+                // อัปเดตสถานะ
+                await db.collection("recharges").doc(docId).update({ status: status });
+
+                // ถ้าอนุมัติ -> บวกเงิน
+                if (action === 'approve' && targetUserRef) {
+                    await db.runTransaction(async (transaction) => {
+                        const userDoc = await transaction.get(targetUserRef);
+                        const currentBal = parseFloat(userDoc.data().balance) || 0;
+                        transaction.update(targetUserRef, { balance: currentBal + parseFloat(amount) });
+                    });
+                    
+                    // แจ้งเตือน User
+                    await db.collection("notifications").add({ 
+                        user_id: targetUserRef.id, 
+                        title: '💰 เติมเงินสำเร็จ', 
+                        message: `ยอดเงิน ฿${amount.toLocaleString()} เข้าสู่กระเป๋าเรียบร้อยแล้ว`, 
+                        read: false, 
+                        timestamp: new Date().toISOString() 
+                    });
+                    await checkAndUnlockFrozenOrders(targetUserRef.id);
+                }
+
+                closeModal('modal-recharge-confirm');
+                showAdminAlert('สำเร็จ', action === 'approve' ? 'อนุมัติรายการเรียบร้อยแล้ว' : 'ปฏิเสธรายการเรียบร้อยแล้ว');
+
+            } catch(e) {
+                closeModal('modal-recharge-confirm');
+                alert("Error: " + e.message);
+            }
+        }
+
+        // Helper: Alert & Close
+        window.showAdminAlert = (title, msg) => {
+            document.getElementById('alert-title').innerText = title;
+            document.getElementById('alert-msg').innerText = msg;
+            const modal = document.getElementById('modal-admin-alert');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        window.closeModal = (id) => {
+            const el = document.getElementById(id);
+            if(el) { el.classList.add('hidden'); el.classList.remove('flex'); }
+        }
+    
+    // ✅ ฟังก์ชัน: ปลดล็อคโดย "ตัดเงินต้น" และ "คืนเฉพาะค่าคอมมิชชั่น" เมื่อยอดเงินถึงเกณฑ์
+      // ✅ ฟังก์ชัน: ปลดล็อค + ตัดเงิน + ข้ามรอบงาน (แก้บั๊กวนลูป)
+       // ✅ ฟังก์ชัน: ปลดล็อคโดย "คืนยอดเงินต้นให้ครบ" และ "บวกค่าคอมมิชชั่นเพิ่ม"
+        // (Logic ใหม่: เงินที่เติมมาคือต้นทุน เมื่อปลดล็อค เงินต้นต้องอยู่ครบ + กำไร)
+        // ✅ ฟังก์ชัน: ปลดล็อค + คืนเงินต้น + บวกกำไร + บันทึกยอดคอมมิชชั่นลงฐานข้อมูล
+      // ✅ ฟังก์ชัน: ปลดล็อค + คืนเงินต้น + บวกกำไร + รีเซ็ตงานเป็น 0 (สำหรับหน้าเติมเงิน)
+        async function checkAndUnlockFrozenOrders(userId) {
+            try {
+                const userRef = db.collection("users").doc(userId);
+                const userSnap = await userRef.get();
+                if (!userSnap.exists) return;
+                
+                const userData = userSnap.data();
+                const currentBalance = parseFloat(userData.balance || 0); 
+
+                const ordersSnap = await db.collection("orders")
+                    .where("username", "==", userData.username)
+                    .where("status", "==", "frozen")
+                    .get();
+
+                if (ordersSnap.empty) return;
+
+                let totalFrozenNeeded = 0;
+                ordersSnap.forEach(doc => { totalFrozenNeeded += parseFloat(doc.data().amount || 0); });
+
+                console.log(`ยอดเงินที่มี: ${currentBalance}, ยอดสินค้าที่ติด Frozen: ${totalFrozenNeeded}`);
+
+                if (Number(currentBalance.toFixed(2)) >= Number(totalFrozenNeeded.toFixed(2))) {
+                    
+                    let batch = db.batch();
+                    let profitToAdd = 0; 
+
+                    ordersSnap.forEach(doc => {
+                        const orderData = doc.data();
+                        const commission = parseFloat(orderData.commission || 0); 
+                        profitToAdd += commission;
+
+                        batch.update(doc.ref, {
+                            status: 'completed',       
+                            payment_status: 'paid',    
+                            pay_time: new Date().toISOString(),
+                            timestamp: new Date().toISOString()
+                        });
+                    });
+
+                    const finalProfit = Number(profitToAdd.toFixed(2));
+
+                    batch.update(userRef, {
+                        balance: firebase.firestore.FieldValue.increment(finalProfit), 
+                        commission: firebase.firestore.FieldValue.increment(finalProfit),
+                        "trap_config.is_triggered": true, 
+                        
+                        // ✅✅✅ แก้ตรงนี้: รีเซ็ตจำนวนงานเป็น 0
+                        todayCount: 0
+                    });
+
+                    await batch.commit();
+
+                    const netBalance = Number((currentBalance + finalProfit).toFixed(2));
+                    
+                    alert(`🔓 ระบบปลดล็อคและรีเซ็ตงานให้อัตโนมัติ!\n\n- ยอดคงเหลือ: ${netBalance.toLocaleString()}\n- จำนวนงาน: รีเซ็ตเป็น 0 แล้ว`);
+                }
+            } catch (e) {
+                console.error("Auto Unlock Error:", e);
+            }
+        }
+    </script>
+    
+    <div id="modal-recharge-confirm" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-[150] backdrop-blur-sm font-sans">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center transform transition-all scale-100 modal-scale-in">
+        <div id="rc-icon-bg" class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-gray-100 mb-4 transition-colors">
+            <i id="rc-icon" class="fa-solid fa-question text-2xl text-gray-600"></i>
+        </div>
+        <h3 id="rc-title" class="text-lg leading-6 font-bold text-gray-900 mb-2">...</h3>
+        <div id="rc-desc" class="text-sm text-gray-500 mb-6">...</div>
+        <div class="flex gap-3 justify-center">
+            <button onclick="executeRechargeAction()" id="rc-btn-confirm" class="w-full inline-flex justify-center rounded-lg border border-transparent shadow-sm px-4 py-2.5 bg-gray-600 text-base font-medium text-white hover:bg-gray-700 focus:outline-none transition">ยืนยัน</button>
+            <button onclick="closeModal('modal-recharge-confirm')" class="w-full inline-flex justify-center rounded-lg border border-gray-300 shadow-sm px-4 py-2.5 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none transition">ยกเลิก</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-admin-alert" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-[160] backdrop-blur-sm font-sans">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center transform transition-all scale-100 modal-scale-in">
+        <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-4">
+            <i class="fa-solid fa-check text-2xl text-green-600"></i>
+        </div>
+        <h3 id="alert-title" class="text-lg leading-6 font-bold text-gray-900 mb-2">สำเร็จ</h3>
+        <p id="alert-msg" class="text-sm text-gray-500 mb-6">...</p>
+        <button onclick="closeModal('modal-admin-alert')" class="w-full inline-flex justify-center rounded-lg border border-transparent shadow-md px-4 py-2.5 bg-gray-800 text-base font-medium text-white hover:bg-gray-900 focus:outline-none transition">ตกลง</button>
+    </div>
+</div>
+</div>
+
+<div id="modal-admin-alert" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-[160] backdrop-blur-sm font-sans">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center transform transition-all scale-100 modal-scale-in">
+        <div id="alert-icon-bg" class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-4">
+            <i id="alert-icon" class="fa-solid fa-check text-2xl text-green-600"></i>
+        </div>
+        <h3 id="alert-title" class="text-lg leading-6 font-bold text-gray-900 mb-2">สำเร็จ</h3>
+        <p id="alert-msg" class="text-sm text-gray-500 mb-6">ดำเนินการเรียบร้อยแล้ว</p>
+        <button onclick="closeModal('modal-admin-alert')" class="w-full inline-flex justify-center rounded-lg border border-transparent shadow-md px-4 py-2.5 bg-gray-800 text-base font-medium text-white hover:bg-gray-900 focus:outline-none transition">
+            ตกลง (OK)
+        </button>
+    </div>
+</div>
+
+</body>
+</html>

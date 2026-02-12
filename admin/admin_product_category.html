@@ -1,0 +1,178 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+
+    <script>
+    // --- ระบบป้องกันการเข้าถึง (Security Check) ---
+    // ถ้าในเครื่องไม่มีข้อมูลว่า 'admin_logged_in' เป็น 'true'
+    if (localStorage.getItem('admin_logged_in') !== 'true') {
+        // ให้ดีดกลับไปที่หน้า Login ทันที (ถอยโฟลเดอร์ออกมา 1 ขั้น แล้วเข้า admin_login)
+        window.location.href = '../admin_login/index.html';
+    }
+</script>
+    <meta charset="UTF-8">
+    <title>Admin - Categories</title>
+    <link rel="stylesheet" href="js/admin_style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    
+    <style> .table-wrapper { overflow-x: auto; white-space: nowrap; } th, td { padding: 12px 10px; font-size: 11px; } </style>
+</head>
+<body>
+    <script src="js/admin_ui.js"></script>
+    <script src="js/firebase_setup.js"></script> 
+
+    <script>
+        renderAdminUI('trading', 'pcat');
+
+        document.getElementById('main-content').innerHTML = `
+            <div class="px-4 py-3 flex justify-between items-center bg-white border-b mb-4 shadow-sm">
+                <span class="text-gray-600 font-bold">การจัดการหมวดหมู่</span>
+                <button onclick="openModal('add')" class="bg-[#00a65a] text-white px-3 py-1 rounded text-xs hover:bg-[#008d4c]">
+                    <i class="fa-solid fa-plus mr-1"></i> เพิ่มหมวดหมู่
+                </button>
+            </div>
+            
+            <div class="bg-white rounded shadow border-t-2 border-[#d2d6de] table-wrapper custom-scroll">
+                <table class="w-full text-left">
+                    <thead class="bg-gray-50 border-b text-gray-600">
+                        <tr>
+                            <th>รหัส</th>
+                            <th>ชื่อหมวดหมู่</th>
+                            <th>สัดส่วน</th>
+                            <th>การแนะนำ</th>
+                            <th>เวลา</th>
+                            <th class="text-center">สถานะ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="cat-body"><tr><td colspan="6" class="text-center p-4">กำลังโหลด...</td></tr></tbody>
+                </table>
+            </div>
+
+            <div id="catModal" class="fixed inset-0 bg-black bg-opacity-50 hidden flex items-center justify-center z-50">
+                <div class="bg-white rounded shadow-lg w-96 p-6">
+                    <h2 id="modalTitle" class="text-lg font-bold mb-4 text-gray-700">เพิ่มหมวดหมู่</h2>
+                    <input type="hidden" id="editDocId">
+                    
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">รหัส (Auto)</label>
+                            <input type="text" id="inpId" class="w-full border p-2 rounded text-xs bg-gray-100" disabled>
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">ชื่อหมวดหมู่</label>
+                            <input type="text" id="inpName" class="w-full border p-2 rounded text-xs">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">สัดส่วน (Ratio)</label>
+                            <input type="text" id="inpRatio" class="w-full border p-2 rounded text-xs" placeholder="เช่น 0.002 เหรียญ">
+                        </div>
+                        <div>
+                            <label class="block text-xs text-gray-500 mb-1">การแนะนำ</label>
+                            <input type="text" id="inpRecommend" class="w-full border p-2 rounded text-xs" placeholder="เช่น เงิน, ทอง">
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end gap-2 mt-6">
+                        <button onclick="closeModal()" class="px-4 py-2 bg-gray-300 text-gray-700 rounded text-xs">ยกเลิก</button>
+                        <button onclick="saveData()" class="px-4 py-2 bg-[#00a65a] text-white rounded text-xs">บันทึก</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        let allCats = [];
+
+        function fetchCategories() {
+            const tbody = document.getElementById('cat-body');
+            if (!window.db) return setTimeout(fetchCategories, 500);
+
+            db.collection("categories").get().then((snap) => {
+                allCats = [];
+                snap.forEach(d => allCats.push({docId: d.id, ...d.data()}));
+                allCats.sort((a,b) => a.id - b.id);
+
+                tbody.innerHTML = '';
+                allCats.forEach(c => {
+                    const cStr = JSON.stringify(c).replace(/"/g, '&quot;');
+                    
+                    const row = `
+                        <tr class="hover:bg-gray-50 border-b">
+                            <td class="text-gray-500">${c.id}</td>
+                            <td>${c.name}</td>
+                            <td>${c.ratio}</td>
+                            <td>${c.recommend}</td>
+                            <td class="text-gray-500 text-[10px]">${c.time}</td>
+                            <td class="text-center flex gap-1 justify-center">
+                                <button onclick="openModal('edit', ${cStr})" class="bg-[#00a65a] text-white px-2 py-0.5 rounded text-[10px]">แก้ไข</button>
+                                <button onclick="deleteItem('${c.docId}')" class="bg-[#dd4b39] text-white px-2 py-0.5 rounded text-[10px]">ลบ</button>
+                            </td>
+                        </tr>
+                    `;
+                    tbody.insertAdjacentHTML('beforeend', row);
+                });
+            });
+        }
+
+        window.openModal = (mode, data = null) => {
+            const modal = document.getElementById('catModal');
+            document.getElementById('editDocId').value = '';
+            document.getElementById('inpName').value = '';
+            document.getElementById('inpRatio').value = '';
+            document.getElementById('inpRecommend').value = '';
+
+            if (mode === 'add') {
+                document.getElementById('modalTitle').innerText = 'เพิ่มหมวดหมู่';
+                const maxId = allCats.length > 0 ? Math.max(...allCats.map(c => c.id)) : 0;
+                document.getElementById('inpId').value = maxId + 1;
+            } else {
+                document.getElementById('modalTitle').innerText = 'แก้ไขหมวดหมู่';
+                document.getElementById('editDocId').value = data.docId;
+                document.getElementById('inpId').value = data.id;
+                document.getElementById('inpName').value = data.name;
+                document.getElementById('inpRatio').value = data.ratio;
+                document.getElementById('inpRecommend').value = data.recommend;
+            }
+            modal.classList.remove('hidden');
+        }
+
+        window.closeModal = () => document.getElementById('catModal').classList.add('hidden');
+
+        window.saveData = async () => {
+            const docId = document.getElementById('editDocId').value;
+            const now = new Date();
+            const timeStr = now.toLocaleDateString('th-TH', { day: 'numeric', month: 'long', year: 'numeric' }) + ', ' + now.toLocaleTimeString('th-TH');
+
+            const dataObj = {
+                id: Number(document.getElementById('inpId').value),
+                name: document.getElementById('inpName').value,
+                ratio: document.getElementById('inpRatio').value,
+                recommend: document.getElementById('inpRecommend').value,
+                status: true,
+                time: timeStr
+            };
+
+            try {
+                if (docId) await db.collection("categories").doc(docId).update(dataObj);
+                else await db.collection("categories").add(dataObj);
+                
+                closeModal();
+                fetchCategories();
+                alert("บันทึกสำเร็จ!");
+            } catch (e) { alert("Error: " + e.message); }
+        }
+
+        window.deleteItem = async (docId) => {
+            if(confirm("ลบหมวดหมู่นี้?")) {
+                await db.collection("categories").doc(docId).delete();
+                fetchCategories();
+            }
+        }
+
+        setTimeout(fetchCategories, 500);
+    </script>
+</body>
+</html>

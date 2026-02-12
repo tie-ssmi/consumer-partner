@@ -1,0 +1,2274 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<script>
+    // --- ระบบป้องกันการเข้าถึง (Security Check) ---
+    // ถ้าในเครื่องไม่มีข้อมูลว่า 'admin_logged_in' เป็น 'true'
+    if (localStorage.getItem('admin_logged_in') !== 'true') {
+        // ให้ดีดกลับไปที่หน้า Login ทันที (ถอยโฟลเดอร์ออกมา 1 ขั้น แล้วเข้า admin_login)
+        window.location.href = '../admin_login/index.html';
+    }
+</script>
+
+    <meta charset="UTF-8">
+    <title>Admin - รายชื่อสมาชิก</title>
+    <link rel="stylesheet" href="js/admin_style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <style>
+        /* เพิ่มพื้นที่ด้านล่างเยอะๆ เพื่อให้เลื่อนหนีเมนูได้ */
+.table-wrapper { 
+    overflow-x: auto; 
+    white-space: nowrap; 
+    padding-bottom: 20px; /* ✅ แก้ตรงนี้ให้เยอะขึ้น */
+    
+}
+        th, td { padding: 12px 10px; font-size: 11px; vertical-align: middle; border-bottom: 1px solid #f3f4f6; text-align: center; }
+        th { background-color: #f9fafb; font-weight: 600; color: #4b5563; }
+        tr:hover { background-color: #f8fafc; transition: 0.2s; }
+        .btn-action { padding: 4px 8px; border-radius: 4px; font-size: 10px; color: white; margin: 0 2px; transition: 0.2s; }
+        .btn-inject { background-color: #ef4444; } .btn-orders { background-color: #0ea5e9; } .btn-level { background-color: #f59e0b; } .btn-reset { background-color: #64748b; } 
+        .btn-action:hover { opacity: 0.8; transform: scale(1.05); }
+        .modal-scale-in { animation: scaleIn 0.2s ease-out forwards; }
+        @keyframes scaleIn { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans">
+    <script src="js/admin_ui.js"></script>
+    <script src="js/firebase_setup.js"></script> 
+
+    <script>
+        renderAdminUI('members', 'list'); 
+
+        // 1. วางทับส่วน main-content เดิม
+       // วางทับส่วนนี้ใหม่อีกครั้งครับ
+        document.getElementById('main-content').innerHTML = `
+            <div class="bg-white p-5 shadow-sm border-b flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold text-gray-800">👥 รายชื่อสมาชิก (Member List)</h2>
+                <div class="flex gap-2">
+                    <button onclick="openAddMemberModal()" class="bg-white border border-gray-300 text-gray-600 px-3 py-1.5 rounded text-xs hover:bg-gray-50 font-bold shadow-sm transition">
+                        <i class="fa-solid fa-user-plus text-green-500"></i> เพิ่มสมาชิก
+                    </button>
+                </div>
+            </div>
+            
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4 mx-4">
+                <div class="flex gap-2">
+                    <input type="text" id="search-input" onkeyup="renderTable(true)" placeholder="ค้นหาสมาชิก..." class="border px-3 py-2 text-xs rounded w-64 focus:outline-none focus:border-indigo-500">
+                    <button class="bg-indigo-600 text-white px-4 py-2 rounded text-xs shadow hover:bg-indigo-700">ค้นหา</button>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 mx-4 flex flex-col mb-10">
+                <div class="table-wrapper custom-scroll flex-1">
+                    <table class="w-full">
+                        <thead class="bg-gray-50 border-b border-gray-200">
+                            <tr>
+                                <th><input type="checkbox"></th>
+                                <th>ไอดี</th>
+                                <th>เวลาลงทะเบียน</th>
+                                <th>หมายเลขโทรศัพท์</th>
+                                <th>ชื่อผู้ใช้</th>
+                                <th>ระดับ</th>
+                                <th>ยอดสั่งซื้อวันนี้</th>
+                                <th>รหัสเชิญ</th>
+                                <th class="text-right text-green-600">ค่าคอมฯ (Comm)</th>
+                                <th class="text-right">ยอดเงินรวม</th>
+                                <th class="text-right text-red-500">ยอดแช่แข็ง</th> 
+                                <th class="text-right text-blue-600">ยอดที่ใช้ได้</th> 
+                                <th>สถานะออนไลน์</th> 
+                                <th class="text-red-500">บันทึกช่วยจำ</th>
+                                <th>ดำเนินการ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="users-body">
+                            <tr><td colspan="15" class="text-center p-12 text-gray-400">กำลังโหลดข้อมูล...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="p-4 border-t bg-gray-50 flex justify-between items-center text-xs rounded-b-xl">
+                    <div class="text-gray-500">
+                        แสดง <span id="show-start" class="font-bold">0</span> ถึง <span id="show-end" class="font-bold">0</span> จากทั้งหมด <span id="show-total" class="font-bold">0</span> รายการ
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="changePage(-1)" id="btn-prev-page" class="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed font-bold text-gray-600 shadow-sm">
+                            <i class="fa-solid fa-chevron-left"></i> ก่อนหน้า
+                        </button>
+                        <span id="page-indicator" class="px-3 py-1.5 bg-white border rounded font-bold text-indigo-600 shadow-sm">
+                            หน้า 1
+                        </span>
+                        <button onclick="changePage(1)" id="btn-next-page" class="px-3 py-1.5 bg-white border rounded hover:bg-gray-100 disabled:opacity-50 disabled:cursor-not-allowed font-bold text-gray-600 shadow-sm">
+                            ถัดไป <i class="fa-solid fa-chevron-right"></i>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // Modals Code (Add Member, Level, History) - คงเดิมไว้
+        const modalAddHtml = `<div id="modal-add-member" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 backdrop-blur-sm font-sans"><div class="bg-white rounded-lg shadow-2xl w-full max-w-lg modal-scale-in overflow-hidden"><div class="flex justify-between items-center p-4 border-b"><h3 class="font-bold text-gray-700">เพิ่มสมาชิก</h3><button onclick="closeModal('modal-add-member')" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button></div><div class="p-6 space-y-4"><div class="flex items-center gap-4"><label class="w-32 text-right text-xs font-bold text-gray-600">ตัวแทนระดับ 1</label><select id="add-agent" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500 bg-gray-50"><option value="platform">Platform (Admin)</option></select></div><div class="flex items-center gap-4"><label class="w-32 text-right text-xs font-bold text-gray-600">ชื่อผู้ใช้</label><input type="text" id="add-username" placeholder="โปรดป้อนชื่อผู้ใช้" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"></div><div class="flex items-center gap-4"><label class="w-32 text-right text-xs font-bold text-gray-600">หมายเลขโทรศัพท์ <span class="text-red-500">*</span></label><div class="flex-1 flex border border-gray-300 rounded overflow-hidden"><select id="add-country-code" class="bg-gray-50 px-2 py-2 text-sm border-r border-gray-300 focus:outline-none font-bold text-gray-700 cursor-pointer"><option value="+66">🇹🇭 +66</option><option value="+856">🇱🇦 +856</option><option value="+95">🇲🇲 +95</option><option value="+84">🇻🇳 +84</option><option value="+855">🇰🇭 +855</option><option value="+60">🇲🇾 +60</option><option value="+99">🏳️ +99</option></select><input type="tel" id="add-phone" placeholder="ไม่ต้องใส่ 0 นำหน้า" class="flex-1 px-3 py-2 text-sm focus:outline-none"></div></div><div class="flex items-center gap-4"><label class="w-32 text-right text-xs font-bold text-gray-600">รหัสผ่าน <span class="text-red-500">*</span></label><input type="text" id="add-password" placeholder="โปรดป้อนรหัสผ่าน" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"></div><div class="flex items-center gap-4"><label class="w-32 text-right text-xs font-bold text-gray-600">รหัสผู้แนะนำ</label><input type="text" id="add-upline" placeholder="ระบุรหัสผู้แนะนำ (ถ้ามี)" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"></div></div><div class="bg-gray-50 p-4 flex justify-center gap-3 border-t"><button onclick="saveNewMember()" class="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded text-sm font-bold shadow hover:shadow-md transition">ส่งข้อมูล</button><button onclick="closeModal('modal-add-member')" class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded text-sm font-bold shadow hover:shadow-md transition">ยกเลิก</button></div></div></div>`;
+        document.body.insertAdjacentHTML('beforeend', modalAddHtml);
+
+        const modalLevelHtml = `
+<div id="modal-level" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 backdrop-blur-sm font-sans">
+    <div class="bg-white rounded-lg shadow-2xl w-full max-w-lg modal-scale-in overflow-hidden">
+        <div class="flex justify-between items-center p-4 border-b">
+            <h3 class="font-bold text-gray-700">แก้ไขข้อมูลและยอดเงิน</h3>
+            <button onclick="closeModal('modal-level')" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="p-6 space-y-4">
+            <input type="hidden" id="edit-lvl-uid">
+            
+            <div class="flex items-center gap-4">
+                <label class="w-32 text-right text-xs font-bold text-gray-600">ยอดเงินปัจจุบัน</label>
+                <input type="text" id="edit-lvl-balance-show" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm bg-gray-100 text-gray-500 font-bold" disabled>
+            </div>
+
+            <div class="flex items-center gap-4">
+                <label class="w-32 text-right text-xs font-bold text-green-600">เพิ่มยอดเงิน (+)</label>
+                <input type="number" id="edit-lvl-add-balance" placeholder="ใส่จำนวนเงินที่ต้องการเพิ่ม (เช่น 500)" class="flex-1 border border-green-500 rounded px-3 py-2 text-sm focus:outline-none focus:border-green-700 text-green-700 font-bold">
+            </div>
+
+            <hr class="border-gray-200">
+
+            <div class="flex items-center gap-4">
+                <label class="w-32 text-right text-xs font-bold text-gray-600">ระดับสมาชิก <span class="text-red-500">*</span></label>
+                <select id="edit-lvl-select" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500"></select>
+            </div>
+            <div class="flex items-center gap-4">
+                <label class="w-32 text-right text-xs font-bold text-gray-600">กลุ่มโอเวอร์เลย์ <span class="text-red-500">*</span></label>
+                <select id="edit-lvl-overlay" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                    <option value="none">ไม่เข้าร่วม (None)</option>
+                    <option value="group_a">Group A</option>
+                    <option value="group_b">Group B</option>
+                </select>
+            </div>
+            <div class="flex items-center gap-4">
+                <label class="w-32 text-right text-xs font-bold text-gray-600">จำนวนงานระดับ</label>
+                <input type="number" id="edit-lvl-orders" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+            </div>
+        </div>
+        <div class="bg-gray-50 p-4 flex justify-center gap-3 border-t">
+            <button onclick="saveLevel()" class="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded text-sm font-bold shadow">บันทึกและอัปเดตยอด</button>
+            <button onclick="closeModal('modal-level')" class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded text-sm font-bold shadow">ยกเลิก</button>
+        </div>
+    </div>
+</div>`;
+        document.body.insertAdjacentHTML('beforeend', modalLevelHtml);
+
+        const modalHistoryHtml = `
+        <div id="modal-history" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-50 backdrop-blur-sm">
+            <div class="bg-white rounded-lg shadow-2xl w-full max-w-4xl p-6 modal-scale-in h-[80vh] flex flex-col">
+                <div class="flex justify-between items-center mb-4 border-b pb-2">
+                    <div class="flex items-center gap-2">
+                        <h3 class="font-bold text-gray-800"><i class="fa-solid fa-syringe text-red-500"></i> ประวัติธุรกรรม / แก้ไขยอด (ฉีด)</h3>
+                    </div>
+                    <div class="flex gap-2">
+                         <button onclick="openInjectionModal()" class="bg-green-500 hover:bg-green-600 text-white px-3 py-1 rounded text-xs font-bold shadow transition">
+                            <i class="fa-solid fa-plus"></i> เพิ่มการฉีด
+                        </button>
+                        <button onclick="closeModal('modal-history')" class="text-gray-400 hover:text-gray-600 ml-2"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                </div>
+                <div class="flex-1 overflow-y-auto custom-scroll">
+                    <table class="w-full text-left">
+                        <thead>
+                            <tr class="bg-gray-100 text-xs text-gray-600">
+                                <th class="p-2">ประเภท</th>
+                                <th class="p-2 text-right">จำนวนเงิน</th>
+                                <th class="p-2 text-center">สถานะ</th>
+                                <th class="p-2">เวลา</th>
+                                <th class="p-2 text-center">จัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="history-body" class="text-xs"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>`;
+
+        document.body.insertAdjacentHTML('beforeend', modalHistoryHtml);
+        // อย่าลืมลบ document.body.insertAdjacentHTML ตัวเก่าออกด้วยนะครับ แล้วใส่ตัวใหม่นี้แทน
+        // หรือถ้าเพิ่งวางโค้ดขั้นตอนที่ 1 ไป ก็วางตัวนี้ทับตัวเดิมได้เลย
+
+        // --- LOGIC ---
+        let allUsers = [];
+        let frozenMap = {}; // ✅ ตัวแปรเก็บยอด Frozen ของแต่ละคน
+        let levelMap = {};
+        // --- 1. เพิ่มตัวแปร Global เพื่อจำว่ากำลังจัดการ User คนไหน ---
+        let currentTargetUserId = null; 
+
+        // --- 2. เพิ่ม HTML Modal สำหรับการ "ฉีด" (Inject) ---
+        // (ก๊อปปี้ไปวางต่อจาก modalHistoryHtml เดิม หรือวางไว้แถวๆ modal อื่นๆ ก็ได้ครับ)
+        // --- แก้ไขส่วน HTML ของ Modal ฉีด ---
+const modalInjectHtml = `
+<div id="modal-inject" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-[60] backdrop-blur-sm font-sans">
+    <div class="bg-white rounded-lg shadow-xl w-full max-w-lg modal-scale-in overflow-hidden">
+        <div class="flex justify-between items-center p-4 border-b">
+            <h3 class="font-bold text-gray-700">เพิ่มการฉีด / ตั้งค่ากับดัก (Trap)</h3>
+            <button onclick="closeModal('modal-inject')" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="p-6 space-y-4 max-h-[80vh] overflow-y-auto custom-scroll">
+            
+            <div class="flex items-center gap-4">
+                <label class="w-32 text-right text-xs font-bold text-gray-600">ประเภทธุรกรรม</label>
+                <select id="inj-type" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+                    <option value="deposit">➕ เติมเงิน (Deposit)</option>
+                    <option value="withdraw">➖ หักเงิน (Withdraw)</option>
+                </select>
+            </div>
+            <div class="flex items-center gap-4">
+                <label class="w-32 text-right text-xs font-bold text-gray-600">จำนวนเงิน</label>
+                <input type="number" id="inj-amount" placeholder="0.00" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+            </div>
+            <div class="flex items-center gap-4">
+                <label class="w-32 text-right text-xs font-bold text-gray-600">หมายเหตุ</label>
+                <input type="text" id="inj-memo" placeholder="ระบุเหตุผล" class="flex-1 border border-gray-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-indigo-500">
+            </div>
+
+            <div class="bg-purple-50 p-3 rounded border border-purple-100">
+                <div class="flex items-center gap-4">
+                    <label class="w-32 text-right text-xs font-bold text-purple-700">⚡ ตัวคูณค่าคอมฯ (x)</label>
+                    <input type="number" id="inj-multiplier" placeholder="ปกติ = 1" step="0.1" class="flex-1 border border-purple-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-purple-500 text-purple-700 font-bold bg-white">
+                </div>
+            </div>
+
+            <div class="bg-red-50 p-3 rounded border border-red-200 mt-2">
+                <div class="flex items-center gap-2 mb-2 border-b border-red-200 pb-1">
+                    <i class="fa-solid fa-bomb text-red-600"></i>
+                    <span class="text-xs font-bold text-red-700">ตั้งค่ากับดักยอดติดลบ (Negative Trap)</span>
+                </div>
+                
+                <div class="flex gap-3">
+                    <div class="flex-1">
+                        <label class="block text-[10px] font-bold text-gray-600 mb-1">ทำงานถึงรอบที่:</label>
+                        <input type="number" id="inj-trap-round" placeholder="เช่น 9" class="w-full border border-red-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-red-500 text-red-700 font-bold bg-white">
+                    </div>
+                    <div class="flex-1">
+                        <label class="block text-[10px] font-bold text-gray-600 mb-1">ยอดที่จะให้ติดลบ:</label>
+                        <input type="number" id="inj-trap-amount" placeholder="เช่น 10000" class="w-full border border-red-300 rounded px-3 py-2 text-sm focus:outline-none focus:border-red-500 text-red-700 font-bold bg-white">
+                    </div>
+                </div>
+                <p class="text-[10px] text-red-500 mt-2">
+                    * เมื่อผู้ใช้กดงานถึงรอบที่ระบุ ยอด Frozen จะเพิ่มขึ้นทันทีตามจำนวนที่ตั้งไว้ ทำให้เงินคงเหลือติดลบ
+                </p>
+            </div>
+
+        </div>
+        <div class="bg-gray-50 p-4 flex justify-center gap-3 border-t">
+            <button onclick="saveInjection()" class="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded text-sm font-bold shadow">ยืนยัน (บันทึก)</button>
+            <button onclick="closeModal('modal-inject')" class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded text-sm font-bold shadow">ยกเลิก</button>
+        </div>
+    </div>
+</div>`;
+
+document.body.insertAdjacentHTML('beforeend', modalInjectHtml);
+        // --- 3. เพิ่ม HTML Modal ตั้งค่าคำสั่งซื้อ (Order Settings) ---
+        const modalOrderSettingsHtml = `
+        <div id="modal-order-settings" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-[60] backdrop-blur-sm font-sans">
+            <div class="bg-white rounded-lg shadow-xl w-full max-w-lg modal-scale-in overflow-hidden">
+                <div class="flex justify-between items-center p-4 border-b bg-gray-50">
+                    <h3 class="font-bold text-gray-700"><i class="fa-solid fa-gear text-blue-500"></i> ตั้งค่าเงื่อนไขสมาชิก</h3>
+                    <button onclick="closeModal('modal-order-settings')" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button>
+                </div>
+                <div class="p-6 space-y-4">
+                    
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 mb-1">🎯 เป้าหมายคำสั่งซื้อ (Order Target)</label>
+                        <div class="flex items-center border border-gray-300 rounded px-3 py-2 bg-white">
+                            <input type="number" id="set-target-orders" placeholder="0" class="flex-1 text-sm focus:outline-none text-gray-700 font-bold">
+                            <span class="text-xs text-gray-400">รายการ</span>
+                        </div>
+                        <p class="text-[10px] text-gray-400 mt-1">* สมาชิกต้องทำออเดอร์ให้ครบจำนวนนี้ จึงจะสามารถกดถอนเงินได้</p>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 mb-1">💸 อัตราค่าคอมมิชชั่น (Custom Rate)</label>
+                        <div class="flex items-center border border-gray-300 rounded px-3 py-2 bg-white">
+                            <input type="number" id="set-commission" placeholder="เช่น 0.2000" step="0.0001" class="flex-1 text-sm focus:outline-none text-gray-700 font-bold">
+                            <span class="text-xs text-gray-400">%</span>
+                        </div>
+                        <p class="text-[10px] text-gray-400 mt-1">* ถ้าใส่ค่านี้ ระบบจะใช้อัตรานี้แทนเรทมาตรฐานของระดับ VIP</p>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 mb-1">🏦 ข้อจำกัดในการถอนเงิน (Withdraw Limit)</label>
+                        <div class="flex items-center border border-gray-300 rounded px-3 py-2 bg-white">
+                            <input type="number" id="set-withdraw-limit" placeholder="เช่น 3" class="flex-1 text-sm focus:outline-none text-gray-700 font-bold">
+                            <span class="text-xs text-gray-400">ครั้ง / เดือน</span>
+                        </div>
+                        <p class="text-[10px] text-gray-400 mt-1">* จำนวนครั้งที่อนุญาตให้ถอนได้ในแต่ละเดือน (จะรีเซ็ตเมื่อขึ้นเดือนใหม่)</p>
+                    </div>
+
+                    <div>
+                        <label class="block text-xs font-bold text-gray-600 mb-1">📉 ถอนขั้นต่ำ (Minimum Withdraw)</label>
+                        <div class="flex items-center border border-gray-300 rounded px-3 py-2 bg-white">
+                            <span class="text-xs text-gray-400 mr-1">฿</span>
+                            <input type="number" id="set-min-withdraw" placeholder="0.00" class="flex-1 text-sm focus:outline-none text-gray-700 font-bold">
+                        </div>
+                    </div>
+
+                </div>
+                <div class="bg-gray-50 p-4 flex justify-center gap-3 border-t">
+                    <button onclick="saveOrderSettings()" class="bg-teal-600 hover:bg-teal-700 text-white px-6 py-2 rounded text-sm font-bold shadow">บันทึกการตั้งค่า</button>
+                    <button onclick="closeModal('modal-order-settings')" class="bg-orange-500 hover:bg-orange-600 text-white px-6 py-2 rounded text-sm font-bold shadow">ยกเลิก</button>
+                </div>
+            </div>
+        </div>`;
+        document.body.insertAdjacentHTML('beforeend', modalOrderSettingsHtml);
+        async function initData() {
+            if (!window.db) return setTimeout(initData, 1000);
+            
+            // โหลด Levels
+            // โหลด Levels และจำค่าจำนวนงาน
+const levelsSnap = await db.collection("levels").orderBy("price", "asc").get();
+const levelSelect = document.getElementById('edit-lvl-select');
+levelSelect.innerHTML = '';
+
+levelMap = {}; // รีเซ็ตค่า
+
+levelsSnap.forEach(doc => { 
+    const data = doc.data();
+    
+    // ✅ จำค่าจำนวนงานไว้ (สมมติใน DB ชื่อฟิลด์ว่า orders หรือ task_count)
+    // ถ้าในฐานข้อมูลคุณตั้งชื่ออื่น ให้แก้ตรง data.orders เป็นชื่อนั้นครับ
+    levelMap[data.name] = data.orders || 0; 
+
+    const option = document.createElement('option'); 
+    option.value = data.name; 
+    option.innerText = data.name; 
+    levelSelect.appendChild(option); 
+});
+
+            // ✅ 1. ดักจับออเดอร์ที่ Frozen ทั้งหมดมาคำนวณรอไว้
+            db.collection("orders").where("status", "==", "frozen").onSnapshot(snap => {
+                frozenMap = {}; // Reset
+                snap.forEach(doc => {
+                    const d = doc.data();
+                    if(d.username && d.amount) {
+                        // บวกยอด Frozen รวมตาม Username
+                        frozenMap[d.username] = (frozenMap[d.username] || 0) + parseFloat(d.amount);
+                    }
+                });
+                renderTable(); // อัปเดตตารางเมื่อยอด Frozen เปลี่ยน
+            });
+
+            // ✅ 2. ดักจับข้อมูล Users
+            db.collection("users").onSnapshot(snap => {
+                allUsers = [];
+                snap.forEach(doc => allUsers.push({ docId: doc.id, ...doc.data() }));
+                renderTable();
+            });
+        }
+
+        // 2. ประกาศตัวแปรหน้า (เพิ่มใหม่)
+        let currentPage = 1;
+        const itemsPerPage = 10; // อยากให้แสดงกี่คนต่อหน้า แก้เลขนี้
+        let filteredUsers = [];
+
+        // 3. ฟังก์ชัน renderTable แบบใหม่ (วางทับตัวเดิม)
+        function renderTable(isSearch = false) {
+            const tbody = document.getElementById('users-body');
+            const searchVal = document.getElementById('search-input').value.toLowerCase();
+            const now = new Date(); 
+
+            // ถ้าเป็นการพิมพ์ค้นหา ให้รีเซ็ตกลับไปหน้า 1
+            if (isSearch) {
+                currentPage = 1;
+            }
+
+            // กรองข้อมูลและเก็บใส่ตัวแปร filteredUsers
+            filteredUsers = allUsers.filter(u => {
+                return !searchVal || u.username.toLowerCase().includes(searchVal) || u.phone.includes(searchVal);
+            });
+
+            // เรียงลำดับ (ใหม่สุดขึ้นก่อน)
+            filteredUsers.sort((a,b) => new Date(b.created_at || 0) - new Date(a.created_at || 0));
+
+            // --- เริ่มส่วนคำนวณแบ่งหน้า ---
+            const totalItems = filteredUsers.length;
+            const totalPages = Math.ceil(totalItems / itemsPerPage) || 1;
+            
+            if (currentPage > totalPages) currentPage = totalPages;
+            if (currentPage < 1) currentPage = 1;
+
+            const startIndex = (currentPage - 1) * itemsPerPage;
+            const endIndex = startIndex + itemsPerPage;
+            
+            // ตัดข้อมูลมาแสดงเฉพาะหน้าปัจจุบัน
+            const usersToShow = filteredUsers.slice(startIndex, endIndex);
+            // --- จบส่วนคำนวณ ---
+
+            let html = '';
+            usersToShow.forEach(u => {
+                // คำนวณสถานะ Online/Offline
+                let statusHtml = '<span class="px-2 py-0.5 rounded text-[10px] bg-gray-100 text-gray-400">ไม่เคยใช้งาน</span>';
+                if (u.last_active) {
+                    const diffMinutes = (now - new Date(u.last_active)) / 1000 / 60; 
+                    if (diffMinutes < 2) statusHtml = '<span class="px-2 py-0.5 rounded text-[10px] bg-green-100 text-green-700 font-bold">Online</span>';
+                    else statusHtml = `<span class="px-2 py-0.5 rounded text-[10px] bg-gray-100 text-gray-500">Offline</span>`;
+                }
+
+                // คำนวณตัวเลขเงิน
+                const totalComm = parseFloat(u.commission || 0);
+                const totalBalance = parseFloat(u.balance || 0);
+                const frozenAmount = frozenMap[u.username] || 0;
+                const availableBalance = totalBalance - frozenAmount;
+
+                html += `
+                    <tr class="border-b last:border-b-0 hover:bg-gray-50 transition">
+                        <td><input type="checkbox"></td>
+                        <td>${u.id || '-'}</td>
+                        <td class="text-gray-500 text-[10px]">${u.created_at ? new Date(u.created_at).toLocaleString('th-TH') : '-'}</td>
+                        <td>${u.phone || '-'}</td>
+                        <td class="font-bold text-blue-600">${u.username}</td>
+                        <td><span class="px-2 py-0.5 rounded text-[10px] border font-bold text-purple-600 bg-purple-50 border-purple-100">${u.level || 'ทั่วไป'}</span></td>
+                        <td>${u.todayCount || 0}/${levelMap[u.level] || 0}</td>
+                        <td class="font-mono text-gray-500">${u.invite_code || '-'}</td>
+                        <td class="text-right font-bold text-green-500">+${totalComm.toLocaleString(undefined, {minimumFractionDigits:2})}</td>
+                        <td class="text-right font-bold text-gray-700">${totalBalance.toLocaleString(undefined, {minimumFractionDigits:2})}</td>
+                        <td class="text-right font-bold text-red-500">${frozenAmount.toLocaleString(undefined, {minimumFractionDigits:2})}</td> 
+                        <td class="text-right font-bold text-blue-600">${availableBalance.toLocaleString(undefined, {minimumFractionDigits:2})}</td>
+                        <td>${statusHtml}</td>
+                        <td class="text-xs text-red-500 font-bold truncate" title="${u.admin_memo || ''}">${u.admin_memo ? `<i class="fa-solid fa-note-sticky"></i>` : '-'}</td>
+                        <td class="flex justify-center py-2">
+                            <button onclick="openHistory('${u.docId}')" class="btn-action btn-inject">ฉีด</button>
+                            <button onclick="resetUserTasks('${u.docId}')" class="btn-action btn-reset">รีเซ็ต</button>
+                            <button onclick="openOrderSettings('${u.docId}')" class="btn-action btn-orders">คำสั่งซื้อ</button>
+                            <button onclick="openLevelEdit('${u.docId}')" class="btn-action btn-level">ระดับ</button>
+                            <button onclick="toggleActionMenu(event, '${u.docId}')" class="bg-white text-gray-500 hover:text-indigo-600 border w-7 h-7 rounded ml-1 flex items-center justify-center"><i class="fa-solid fa-chevron-down text-[10px]"></i></button>
+                        </td>
+                    </tr>`;
+            });
+
+            tbody.innerHTML = html || '<tr><td colspan="15" class="text-center p-8 text-gray-400">ไม่พบสมาชิก</td></tr>';
+            
+            // เรียกฟังก์ชันอัปเดตปุ่มด้านล่าง
+            updatePaginationControls(totalItems, totalPages, startIndex, usersToShow.length);
+        }
+
+        // 4. เพิ่มฟังก์ชันควบคุมปุ่มกด (Add new functions)
+        function changePage(direction) {
+            const totalPages = Math.ceil(filteredUsers.length / itemsPerPage) || 1;
+            const newPage = currentPage + direction;
+            if (newPage >= 1 && newPage <= totalPages) {
+                currentPage = newPage;
+                renderTable();
+            }
+        }
+
+        function updatePaginationControls(totalItems, totalPages, startIndex, countShown) {
+            document.getElementById('show-start').innerText = totalItems === 0 ? 0 : startIndex + 1;
+            document.getElementById('show-end').innerText = startIndex + countShown;
+            document.getElementById('show-total').innerText = totalItems;
+            document.getElementById('page-indicator').innerText = `หน้า ${currentPage} / ${totalPages}`;
+
+            document.getElementById('btn-prev-page').disabled = (currentPage === 1);
+            document.getElementById('btn-next-page').disabled = (currentPage === totalPages || totalItems === 0);
+        }
+        window.openAddMemberModal = () => { document.getElementById('add-username').value = ''; document.getElementById('add-phone').value = ''; document.getElementById('add-password').value = ''; document.getElementById('add-upline').value = ''; const modal = document.getElementById('modal-add-member'); modal.classList.remove('hidden'); modal.classList.add('flex'); }
+        window.saveNewMember = async () => { const username = document.getElementById('add-username').value.trim(); const countryCode = document.getElementById('add-country-code').value; let phoneBody = document.getElementById('add-phone').value.trim(); const password = document.getElementById('add-password').value.trim(); const upline = document.getElementById('add-upline').value.trim() || 'admin'; if(!phoneBody || !password) { alert("กรุณากรอกเบอร์โทรและรหัสผ่าน"); return; } if (phoneBody.startsWith('0')) { phoneBody = phoneBody.substring(1); } const fullPhone = `${countryCode} ${phoneBody}`; try { const check = await db.collection("users").where("phone", "==", fullPhone).get(); if(!check.empty) { alert("เบอร์โทรศัพท์นี้มีผู้ใช้งานแล้ว"); return; } const randomId = Math.floor(100000 + Math.random() * 900000); const randomInvite = Math.floor(100000 + Math.random() * 900000).toString(); 
+        await db.collection("users").add({ username: username || phoneBody, phone: fullPhone, password: password, upline: upline, balance: 150, level: "VIP 1", id: randomId, invite_code: randomInvite, created_at: new Date().toISOString(), todayCount: 0, online: false,random_qty_min: 1, 
+                    random_qty_max: 300 });
+         closeModal('modal-add-member'); alert(`เพิ่มสมาชิกสำเร็จ! (รหัสเชิญ: ${randomInvite})`); } catch(e) { alert("Error: " + e.message); } }
+        window.openLevelEdit = (docId) => { 
+    const user = allUsers.find(u => u.docId === docId); 
+    if (!user) return; 
+
+    document.getElementById('edit-lvl-uid').value = docId; 
+    
+    // ตั้งค่าเดิม
+    document.getElementById('edit-lvl-select').value = user.level || 'VIP 1'; 
+    document.getElementById('edit-lvl-overlay').value = user.overlay_group || 'none'; 
+    document.getElementById('edit-lvl-orders').value = user.todayCount || 0; 
+
+    // เพิ่มใหม่: โชว์ยอดเงินปัจจุบันและเคลียร์ช่องเติมเงิน
+    document.getElementById('edit-lvl-balance-show').value = parseFloat(user.balance || 0).toLocaleString();
+    document.getElementById('edit-lvl-add-balance').value = '';
+
+    const modal = document.getElementById('modal-level'); 
+    modal.classList.remove('hidden'); 
+    modal.classList.add('flex'); 
+}
+        window.saveLevel = async () => { 
+    const docId = document.getElementById('edit-lvl-uid').value; 
+    const addAmount = parseFloat(document.getElementById('edit-lvl-add-balance').value) || 0;
+
+    try { 
+        let updateData = { 
+            level: document.getElementById('edit-lvl-select').value, 
+            overlay_group: document.getElementById('edit-lvl-overlay').value, 
+            todayCount: parseInt(document.getElementById('edit-lvl-orders').value) || 0 
+        };
+
+        // ถ้ามีการกรอกเงินเพิ่ม
+        if (addAmount !== 0) {
+            // 1. บวกเงินเข้ากระเป๋า User
+            updateData.balance = firebase.firestore.FieldValue.increment(addAmount);
+
+            // 2. (สำคัญ) สร้างประวัติการเติมเงิน เพื่อให้ Dashboard มองเห็น
+            await db.collection("recharges").add({
+                user_id: docId,
+                amount: addAmount,
+                status: 'approved',        // ต้องสถานะ approved Dashboard ถึงจะนับ
+                timestamp: new Date().toISOString(),
+                method: 'admin_manual',    // ระบุว่าแอดมินเติมให้
+                username: 'Admin Inject'   // ใส่ไว้ให้รู้ว่าเป็นยอดจากระบบ
+            });
+        }
+
+        await db.collection("users").doc(docId).update(updateData); 
+        if (addAmount > 0) {
+            await checkAndUnlockFrozenOrders(docId);
+        }
+        closeModal('modal-level'); 
+        
+        if(addAmount !== 0) {
+            alert(`เพิ่มยอดเงินสำเร็จ +${addAmount.toLocaleString()} และบันทึกลงยอดรวมแล้ว`);
+        } else {
+            alert("บันทึกข้อมูลเรียบร้อย");
+        }
+        
+    } catch(e) { 
+        alert("เกิดข้อผิดพลาด: " + e.message); 
+    } 
+}
+       // 1. แก้ไขฟังก์ชันเปิดประวัติ (ให้จำ User ID)
+        window.openHistory = async (docId) => { 
+            currentTargetUserId = docId; // ✅ จำ ID ผู้ใช้ไว้
+            document.getElementById('history-body').innerHTML = '<tr><td colspan="5" class="text-center p-4">กำลังโหลด...</td></tr>'; 
+            
+            const modal = document.getElementById('modal-history'); 
+            modal.classList.remove('hidden'); 
+            modal.classList.add('flex'); 
+            
+            await renderHistoryTable(docId); // แยกฟังก์ชันโหลดตารางออกมา
+        }
+
+        // 2. ฟังก์ชันโหลดตาราง (แยกออกมาเพื่อให้เรียกซ้ำได้)
+        async function renderHistoryTable(docId) {
+            let html = ''; 
+            
+            // ดึงข้อมูลเติมเงิน (Recharges)
+            const rSnap = await db.collection("recharges").where("user_id", "==", docId).orderBy("timestamp", "desc").limit(20).get(); 
+            rSnap.forEach(d => { 
+                const data = d.data();
+                html += `
+                <tr class="border-b hover:bg-gray-50">
+                    <td class="p-2 text-green-600 font-bold">เติมเงิน/ฉีด</td>
+                    <td class="p-2 text-right text-green-600 font-bold">+${Number(data.amount).toLocaleString()}</td>
+                    <td class="p-2 text-center"><span class="bg-green-100 text-green-800 px-2 rounded-full text-[10px]">${data.status}</span></td>
+                    <td class="p-2 text-gray-500 text-[10px]">${new Date(data.timestamp).toLocaleString()}</td>
+                    <td class="p-2 text-center flex justify-center gap-2">
+                        <button onclick="editTx('recharges', '${d.id}', ${data.amount})" class="text-blue-500 hover:text-blue-700 bg-blue-50 p-1 rounded"><i class="fa-solid fa-pen"></i></button>
+                        <button onclick="delTx('recharges', '${d.id}', ${data.amount}, 'plus')" class="text-red-500 hover:text-red-700 bg-red-50 p-1 rounded"><i class="fa-solid fa-trash"></i></button>
+                    </td>
+                </tr>`; 
+            }); 
+            
+            // ดึงข้อมูลถอนเงิน (Withdrawals)
+            const wSnap = await db.collection("withdrawals").where("user_id", "==", docId).orderBy("timestamp", "desc").limit(20).get(); 
+            wSnap.forEach(d => { 
+                const data = d.data();
+                html += `
+                <tr class="border-b hover:bg-gray-50">
+                    <td class="p-2 text-red-600 font-bold">ถอนเงิน/หัก</td>
+                    <td class="p-2 text-right text-red-600 font-bold">-${Number(data.amount).toLocaleString()}</td>
+                    <td class="p-2 text-center"><span class="bg-gray-100 text-gray-800 px-2 rounded-full text-[10px]">${data.status}</span></td>
+                    <td class="p-2 text-gray-500 text-[10px]">${new Date(data.timestamp).toLocaleString()}</td>
+                    <td class="p-2 text-center flex justify-center gap-2">
+                        <button onclick="editTx('withdrawals', '${d.id}', ${data.amount})" class="text-blue-500 hover:text-blue-700 bg-blue-50 p-1 rounded"><i class="fa-solid fa-pen"></i></button>
+                        <button onclick="delTx('withdrawals', '${d.id}', ${data.amount}, 'minus')" class="text-red-500 hover:text-red-700 bg-red-50 p-1 rounded"><i class="fa-solid fa-trash"></i></button>
+                    </td>
+                </tr>`; 
+            }); 
+
+            document.getElementById('history-body').innerHTML = html || '<tr><td colspan="5" class="text-center p-4 text-gray-400">ไม่มีประวัติธุรกรรม</td></tr>';
+        }
+// --- ฟังก์ชันรีเซ็ตงาน (Reset Tasks) ---
+window.resetUserTasks = async (docId) => {
+    // 1. เด้งหน้าต่างถามยืนยัน
+    if(confirm('⚠️ ยืนยันการรีเซ็ต?\n\nต้องการรีเซ็ตงานของ ผู้ใช้คนนี้ หรือไม่? \n(จำนวนงานที่ทำวันนี้จะถูกปรับเป็น 0)')) {
+        try {
+            // 2. ส่งคำสั่งอัปเดตไปที่ Firebase
+            await db.collection("users").doc(docId).update({
+                todayCount: 0
+            });
+            
+            // 3. แจ้งเตือนเมื่อเสร็จสิ้น
+            alert('✅ รีเซ็ตงานเป็น 0 เรียบร้อยแล้ว');
+            
+            // (ไม่ต้องเรียก renderTable() เพราะ onSnapshot จะทำงานให้อัตโนมัติ)
+        } catch(e) {
+            alert('เกิดข้อผิดพลาด: ' + e.message);
+        }
+    }
+}
+        // 3. ฟังก์ชันเปิดหน้าต่างฉีด
+        // --- แก้ไขฟังก์ชันเปิด Modal ---
+window.openInjectionModal = () => {
+    if(!currentTargetUserId) return;
+
+    // เคลียร์ค่าเดิมของฟอร์มฉีดปกติ
+    document.getElementById('inj-amount').value = '';
+    document.getElementById('inj-memo').value = '';
+    
+    // ดึงข้อมูล User ปัจจุบัน
+    const user = allUsers.find(u => u.docId === currentTargetUserId);
+    
+    // 1. ดึงตัวคูณเดิม
+    const currentMultiplier = user && user.commission_multiplier ? user.commission_multiplier : '';
+    document.getElementById('inj-multiplier').value = currentMultiplier;
+
+    // 2. ดึงค่ากับดักเดิม (ถ้ามี)
+    if (user && user.trap_config) {
+        document.getElementById('inj-trap-round').value = user.trap_config.trigger_round || '';
+        document.getElementById('inj-trap-amount').value = user.trap_config.trap_amount || '';
+    } else {
+        document.getElementById('inj-trap-round').value = '';
+        document.getElementById('inj-trap-amount').value = '';
+    }
+
+    const modal = document.getElementById('modal-inject');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+        // 4. ฟังก์ชันบันทึกการฉีด (Save Injection)
+        // --- แก้ไขฟังก์ชันบันทึก ---
+// 4. ฟังก์ชันบันทึกการฉีด (Save Injection)
+        window.saveInjection = async () => {
+            if(!currentTargetUserId) return;
+            
+            // รับค่าส่วนฉีดปกติ
+            const type = document.getElementById('inj-type').value;
+            const amountStr = document.getElementById('inj-amount').value;
+            const memo = document.getElementById('inj-memo').value;
+            
+            // รับค่าส่วนปรับแต่ง
+            const multiplierStr = document.getElementById('inj-multiplier').value;
+            const trapRoundStr = document.getElementById('inj-trap-round').value;
+            const trapAmountStr = document.getElementById('inj-trap-amount').value;
+
+            const amount = parseFloat(amountStr);
+            const multiplier = parseFloat(multiplierStr);
+            const trapRound = parseInt(trapRoundStr);
+            const trapAmount = parseFloat(trapAmountStr);
+
+            try {
+                let updateData = {}; 
+                let message = "✅ บันทึกสำเร็จ: ";
+
+                // 1. จัดการเรื่อง "ตัวคูณ"
+                if (!isNaN(multiplier)) {
+                    updateData.commission_multiplier = multiplier;
+                    message += `ปรับตัวคูณ x${multiplier} `;
+                }
+
+                // 2. 🔴 จัดการเรื่อง "กับดัก (Trap)" -> แก้ตรงนี้ครับ
+                if (!isNaN(trapRound) && !isNaN(trapAmount) && trapRound > 0 && trapAmount > 0) {
+                    updateData.trap_config = {
+                        trigger_round: trapRound,  
+                        trap_amount: trapAmount,   
+                        is_triggered: false,
+                        
+                        // ✅✅✅ เพิ่มบรรทัดนี้เข้าไปครับ (สำคัญมาก!) ✅✅✅
+                        active: true 
+                    };
+                    message += `| ตั้งกับดักรอบที่ ${trapRound} ยอด ${trapAmount.toLocaleString()} `;
+                } else if (trapRoundStr === '' && trapAmountStr === '') {
+                    // ถ้าลบออกทั้งคู่ ให้ยกเลิกกับดัก
+                    updateData.trap_config = firebase.firestore.FieldValue.delete();
+                }
+
+                // 3. จัดการเรื่อง "ฉีดเงิน/หักเงิน" (ทำรายการทันที)
+                let isFinancialTx = false;
+                if (!isNaN(amount) && amount > 0) {
+                    isFinancialTx = true;
+                    const txData = {
+                        user_id: currentTargetUserId,
+                        amount: amount,
+                        status: 'approved',
+                        timestamp: new Date().toISOString(),
+                        method: 'admin_injection',
+                        memo: memo || 'Admin Manual Inject'
+                    };
+
+                    if (type === 'deposit') {
+                        await db.collection("recharges").add(txData);
+                        updateData.balance = firebase.firestore.FieldValue.increment(amount);
+                        message += `| เติมเงิน +${amount.toLocaleString()} `;
+                    } else {
+                        await db.collection("withdrawals").add(txData);
+                        updateData.balance = firebase.firestore.FieldValue.increment(-amount);
+                        message += `| หักเงิน -${amount.toLocaleString()} `;
+                    }
+                }
+
+                // ถ้าไม่มีการทำรายการอะไรเลย
+                if (!isFinancialTx && Object.keys(updateData).length === 0) {
+                    alert("กรุณาระบุข้อมูลที่ต้องการแก้ไข (เงิน, ตัวคูณ, หรือกับดัก)");
+                    return;
+                }
+
+                // ส่งข้อมูลเข้า Database
+                await db.collection("users").doc(currentTargetUserId).update(updateData);
+                
+                // เช็คว่าต้องปลดล็อคไหม (เผื่อเติมเงินเข้ามา)
+                await checkAndUnlockFrozenOrders(currentTargetUserId);
+                
+                closeModal('modal-inject');
+                await renderHistoryTable(currentTargetUserId); // รีโหลดตารางประวัติ
+                
+                alert(message);
+
+            } catch(e) {
+                alert("เกิดข้อผิดพลาด: " + e.message);
+                console.error(e);
+            }
+        }
+        // 7. ฟังก์ชันเปิดหน้าต่างตั้งค่าคำสั่งซื้อ
+        window.openOrderSettings = (docId) => {
+            currentTargetUserId = docId;
+            const user = allUsers.find(u => u.docId === docId);
+            if (!user) return;
+
+            // ดึงค่าเก่ามาแสดง (ถ้าไม่มีให้เป็นค่าว่างหรือ 0)
+            document.getElementById('set-target-orders').value = user.req_orders || '';      // เป้าหมายออเดอร์
+            document.getElementById('set-commission').value = user.custom_rate || '';        // เรทพิเศษ
+            document.getElementById('set-withdraw-limit').value = user.withdraw_limit || ''; // จำกัดถอนต่อเดือน
+            document.getElementById('set-min-withdraw').value = user.min_withdraw || '';     // ถอนขั้นต่ำ
+
+            const modal = document.getElementById('modal-order-settings');
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        // 8. ฟังก์ชันบันทึกการตั้งค่า (Save Settings)
+        window.saveOrderSettings = async () => {
+            if (!currentTargetUserId) return;
+
+            // รับค่าจากฟอร์ม
+            const reqOrders = parseInt(document.getElementById('set-target-orders').value) || 0;
+            const customRate = parseFloat(document.getElementById('set-commission').value) || 0;
+            const withdrawLimit = parseInt(document.getElementById('set-withdraw-limit').value) || 0;
+            const minWithdraw = parseFloat(document.getElementById('set-min-withdraw').value) || 0;
+
+            try {
+                // อัปเดตข้อมูลลงใน User Document โดยตรง
+                await db.collection("users").doc(currentTargetUserId).update({
+                    req_orders: reqOrders,         // ต้องทำครบกี่งาน
+                    custom_rate: customRate,       // เรทคอมมิชชั่นพิเศษ (0 = ใช้ตามระบบ)
+                    withdraw_limit: withdrawLimit, // ถอนได้กี่ครั้ง/เดือน (0 = ไม่จำกัด)
+                    min_withdraw: minWithdraw,     // ถอนขั้นต่ำ
+                    
+                    // เพิ่ม Timestamp ว่าอัปเดตเมื่อไหร่ (เผื่อไว้ดู)
+                    settings_updated_at: new Date().toISOString()
+                });
+
+                closeModal('modal-order-settings');
+                alert("✅ บันทึกเงื่อนไขสำหรับสมาชิกเรียบร้อยแล้ว");
+                
+                // (ถ้าต้องการ) อาจจะรีโหลดตารางเพื่อให้แน่ใจว่าข้อมูลล่าสุดถูกดึงมาแล้ว
+                // renderTable(); 
+
+            } catch(e) {
+                alert("เกิดข้อผิดพลาด: " + e.message);
+            }
+        }
+
+        // 5. ฟังก์ชันแก้ไขยอด (Edit Transaction)
+        window.editTx = async (collectionName, docId, oldAmount) => {
+            const newAmountStr = prompt("แก้ไขจำนวนเงิน:", oldAmount);
+            if (newAmountStr === null) return; // กดยกเลิก
+            
+            const newAmount = parseFloat(newAmountStr);
+            if (isNaN(newAmount) || newAmount < 0) {
+                alert("จำนวนเงินไม่ถูกต้อง");
+                return;
+            }
+
+            try {
+                // 1. คำนวณส่วนต่าง
+                const diff = newAmount - oldAmount; // เช่น แก้จาก 100 เป็น 150 -> diff = 50
+                
+                // 2. อัปเดตใน Transaction
+                await db.collection(collectionName).doc(docId).update({
+                    amount: newAmount,
+                    memo: 'Edited by Admin'
+                });
+
+                // 3. อัปเดตเงินในกระเป๋า User ตามส่วนต่าง
+                // ถ้าเป็น recharges (เงินเข้า) -> บวกส่วนต่างเพิ่มเข้าไป
+                // ถ้าเป็น withdrawals (เงินออก) -> ลบส่วนต่างออก (เพราะเงินออกมากขึ้น = balance ลดลง)
+                let balanceChange = 0;
+                if (collectionName === 'recharges') {
+                    balanceChange = diff; 
+                } else {
+                    balanceChange = -diff;
+                }
+
+                if (balanceChange !== 0) {
+                    await db.collection("users").doc(currentTargetUserId).update({
+                        balance: firebase.firestore.FieldValue.increment(balanceChange)
+                    });
+                }
+
+                await renderHistoryTable(currentTargetUserId);
+                alert("แก้ไขยอดเรียบร้อย");
+
+            } catch(e) {
+                alert("Error: " + e.message);
+            }
+        }
+
+        // 6. ฟังก์ชันลบรายการ (ปรับปรุงให้คืนเงินด้วย)
+        window.delTx = async (col, id, amount, type) => { 
+            if(confirm('ต้องการลบรายการนี้ และคืนค่าเงินกลับสู่สภาพเดิมหรือไม่?')) { 
+                try {
+                    await db.collection(col).doc(id).delete();
+                    
+                    // คืนค่าเงิน (Reverse Balance)
+                    let reverseAmount = 0;
+                    if (type === 'plus') {
+                        // ลบยอดเติมเงิน -> ต้องลบเงิน User ออก
+                        reverseAmount = -amount;
+                    } else {
+                        // ลบยอดถอนเงิน -> ต้องคืนเงินกลับให้ User
+                        reverseAmount = amount;
+                    }
+
+                    await db.collection("users").doc(currentTargetUserId).update({
+                        balance: firebase.firestore.FieldValue.increment(reverseAmount)
+                    });
+
+                    await renderHistoryTable(currentTargetUserId);
+                    alert('ลบรายการและปรับปรุงยอดเงินแล้ว');
+                } catch(e) {
+                    alert("Error: " + e.message);
+                }
+            } 
+        }
+        window.closeModal = (id) => { const el = document.getElementById(id); el.classList.add('hidden'); el.classList.remove('flex'); }
+
+        initData();
+// --- Modal เมนูจัดการเพิ่มเติม (More Actions) ---
+// --- Popover Menu (เมนูสไลด์) ---
+// --- Popover Menu แบบแนวนอน (Button Grid) ---
+const popoverMenuHtml = `
+<div id="action-popover" class="fixed z-[100] hidden bg-white rounded-xl shadow-[0_4px_20px_rgba(0,0,0,0.15)] border border-gray-100 p-3 max-w-2xl transform transition-all duration-300 origin-top-right scale-95 opacity-0">
+    
+    <button onclick="closeActionMenu()" class="absolute -top-3 -right-3 bg-gray-500 hover:bg-gray-600 text-white rounded-full w-6 h-6 flex items-center justify-center shadow-md text-xs transition">
+        <i class="fa-solid fa-xmark"></i>
+    </button>
+
+    <div class="flex flex-wrap gap-2 items-center">
+        
+        <button onclick="openInjectionModal()" class="px-2 py-1 rounded bg-red-500 hover:bg-red-600 text-white text-[10px] font-bold shadow-sm">ฉีด</button>
+        <button onclick="resetUserTasks(currentActionUserId)" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold shadow-sm">รีเซ็ตงาน</button>
+        
+        <button onclick="alert('ฟังก์ชันนี้ยังไม่เปิดใช้งาน')" class="px-2 py-1 rounded bg-blue-500 hover:bg-blue-600 text-white text-[10px] font-bold shadow-sm">โค้ด</button>
+        
+        <button onclick="openLevelEdit(currentActionUserId)" class="px-2 py-1 rounded bg-orange-500 hover:bg-orange-600 text-white text-[10px] font-bold shadow-sm">ระดับ</button>
+        
+        <button onclick="openEditBalanceModal(currentActionUserId)" class="px-2 py-1 rounded bg-blue-700 hover:bg-blue-800 text-white text-[10px] font-bold shadow-sm">แก้ไขจำนวนเงิน</button>
+   <button id="btn-invite-status" onclick="toggleInviteCodeStatus(currentActionUserId)" class="px-2 py-1 rounded text-white text-[10px] font-bold shadow-sm transition">กำลังโหลด...</button>
+        <button onclick="openManageUserModal(currentActionUserId)" class="px-2 py-1 rounded bg-teal-600 hover:bg-teal-700 text-white text-[10px] font-bold shadow-sm">จัดการ</button>
+        
+        <button onclick="openBankInfoModal(currentActionUserId)" class="px-2 py-1 rounded bg-teal-600 hover:bg-teal-700 text-white text-[10px] font-bold shadow-sm">ข้อมูลบัตรธนาคาร</button>
+        <button onclick="alert('ดูที่อยู่')" class="px-2 py-1 rounded bg-orange-500 hover:bg-orange-600 text-white text-[10px] font-bold shadow-sm">ข้อมูลที่อยู่</button>
+        <button onclick="alert('ดูสายงาน')" class="px-2 py-1 rounded bg-orange-500 hover:bg-orange-600 text-white text-[10px] font-bold shadow-sm">ดูทีม</button>
+
+        <button onclick="openFullUserHistory(currentActionUserId)" class="px-2 py-1 rounded bg-cyan-600 hover:bg-cyan-700 text-white text-[10px] font-bold shadow-sm">
+    <i class="fa-solid fa-clock-rotate-left mr-1"></i> ประวัติธุรกรรม
+</button>
+        
+<button onclick="askDeleteUser(currentActionUserId)" class="px-2 py-1 rounded bg-red-600 hover:bg-red-700 text-white text-[10px] font-bold shadow-sm">
+    <i class="fa-solid fa-trash mr-1"></i> ลบ
+</button>
+
+<button id="btn-ban-user" onclick="askBanUser(currentActionUserId)" class="px-2 py-1 rounded bg-gray-600 hover:bg-gray-700 text-white text-[10px] font-bold shadow-sm">
+    <i class="fa-solid fa-ban mr-1"></i> ระงับ
+</button>
+        
+        
+        <button id="btn-suspend-order" onclick="askToggleOrderSuspension(currentActionUserId)" class="px-2 py-1 rounded bg-orange-500 hover:bg-orange-600 text-white text-[10px] font-bold shadow-sm">
+    <i class="fa-solid fa-pause mr-1"></i> ระงับสั่งซื้อ
+</button>
+        <button onclick="openMemoModal(currentActionUserId)" class="px-2 py-1 rounded bg-purple-500 hover:bg-purple-600 text-white text-[10px] font-bold shadow-sm">
+    <i class="fa-solid fa-pen-to-square mr-1"></i> บันทึกช่วยจำ
+</button>
+
+    </div>
+    
+    <div class="mt-2 pt-1 border-t border-gray-100 text-[9px] text-gray-400 text-right">
+        Managing: <span id="popover-username" class="font-bold text-gray-600">...</span>
+    </div>
+</div>
+
+<div id="popover-overlay" onclick="closeActionMenu()" class="fixed inset-0 z-[90] hidden"></div>
+`;
+
+// ลบของเก่าออกก่อนแล้วค่อยเพิ่มใหม่
+const oldPopover = document.getElementById('action-popover');
+if(oldPopover) oldPopover.remove();
+const oldOverlay = document.getElementById('popover-overlay');
+if(oldOverlay) oldOverlay.remove();
+
+document.body.insertAdjacentHTML('beforeend', popoverMenuHtml);
+
+// ตัวแปรเก็บ User ID ล่าสุดที่กดเมนูนี้
+let currentMoreActionUserId = null;
+
+// ฟังก์ชันเปิดเมนู
+let currentActionUserId = null;
+
+// ฟังก์ชันเปิด/ปิด เมนู (Toggle)
+// ฟังก์ชันคำนวณตำแหน่งและเปิดเมนู
+// --- ฟังก์ชันเปิดเมนูแบบฉลาด (Smart Position) ---
+window.toggleActionMenu = (event, docId) => {
+    event.stopPropagation();
+    
+    const menu = document.getElementById('action-popover');
+    const overlay = document.getElementById('popover-overlay');
+
+    // ถ้ากดซ้ำที่เดิมให้ปิด
+    if (currentActionUserId === docId && !menu.classList.contains('hidden')) {
+        closeActionMenu();
+        return;
+    }
+
+    currentActionUserId = docId;
+    
+    // อัปเดตข้อมูล User ในเมนู
+    const user = allUsers.find(u => u.docId === docId);
+    if(user) {
+        document.getElementById('popover-username').innerText = user.username;
+
+        // จัดการปุ่มรหัสเชิญ
+        const btnInvite = document.getElementById('btn-invite-status');
+        const isInviteActive = (user.invite_code_active !== false); 
+
+        if (isInviteActive) {
+            btnInvite.innerText = "✅ รหัสเชิญ: ใช้งานได้";
+            btnInvite.className = "px-2 py-1 rounded bg-green-600 hover:bg-green-700 text-white text-[10px] font-bold shadow-sm transition";
+        } else {
+            btnInvite.innerText = "⛔ รหัสเชิญ: ถูกปิด";
+            btnInvite.className = "px-2 py-1 rounded bg-gray-500 hover:bg-gray-600 text-white text-[10px] font-bold shadow-sm transition";
+        }
+    }
+    const btnBan = document.getElementById('btn-ban-user');
+        const isBlocked = (user.account_status === 'blocked');
+
+        if (isBlocked) {
+            // ถ้าโดนแบนอยู่ -> ปุ่มเป็นสีเขียว "ปลดแบน"
+            btnBan.innerHTML = '<i class="fa-solid fa-unlock mr-1"></i> ปลดแบน';
+            btnBan.className = "px-2 py-1 rounded bg-green-600 hover:bg-green-700 text-white text-[10px] font-bold shadow-sm transition";
+        } else {
+            // ถ้าปกติ -> ปุ่มเป็นสีส้ม/เทา "ระงับ"
+            btnBan.innerHTML = '<i class="fa-solid fa-ban mr-1"></i> ระงับบัญชี';
+            btnBan.className = "px-2 py-1 rounded bg-gray-600 hover:bg-gray-700 text-white text-[10px] font-bold shadow-sm transition";
+        }
+
+    // --- 🟢 ส่วนที่แก้ใหม่: คำนวณทิศทาง (Smart Flip) ---
+    const btn = event.currentTarget;
+    const rect = btn.getBoundingClientRect(); // หาพิกัดปุ่ม
+    const windowHeight = window.innerHeight;  // ความสูงหน้าจอ
+
+    // 1. เปิดเมนูออกมาก่อน (แต่ยังโปร่งใส) เพื่อวัดความสูง
+    menu.classList.remove('hidden');
+    const menuHeight = menu.offsetHeight; 
+// ... (ต่อจากส่วน btnBan) ...
+
+    // ✅ ส่วนจัดการปุ่มระงับการสั่งซื้อ (Order Suspend Status)
+    const btnOrder = document.getElementById('btn-suspend-order');
+    // ถ้าไม่มีฟิลด์นี้ ให้ถือว่าปกติ (normal)
+    const isOrderSuspended = (user.order_status === 'suspended');
+
+    if (isOrderSuspended) {
+        // ถ้าโดนระงับอยู่ -> ปุ่มเป็นสีเขียว "เปิดสั่งซื้อ"
+        btnOrder.innerHTML = '<i class="fa-solid fa-play mr-1"></i> เปิดสั่งซื้อ';
+        btnOrder.className = "px-2 py-1 rounded bg-green-600 hover:bg-green-700 text-white text-[10px] font-bold shadow-sm transition";
+    } else {
+        // ถ้าปกติ -> ปุ่มเป็นสีส้ม "ระงับสั่งซื้อ"
+        btnOrder.innerHTML = '<i class="fa-solid fa-pause mr-1"></i> ระงับสั่งซื้อ';
+        btnOrder.className = "px-2 py-1 rounded bg-orange-500 hover:bg-orange-600 text-white text-[10px] font-bold shadow-sm transition";
+    }
+    // 2. เช็คว่าที่ว่างด้านล่าง เหลือพอไหม?
+    const spaceBelow = windowHeight - rect.bottom;
+
+    if (spaceBelow < menuHeight + 20) {
+        // ⬆️ ถ้าที่ล่างไม่พอ -> ให้เด้งขึ้นบน (Flip UP)
+        menu.style.top = (rect.top - menuHeight - 8) + 'px';
+        menu.style.transformOrigin = "bottom right"; // เอฟเฟกต์พุ่งจากล่างขวา
+    } else {
+        // ⬇️ ถ้าที่พอ -> เด้งลงล่างปกติ (Default)
+        menu.style.top = (rect.bottom + 8) + 'px';
+        menu.style.transformOrigin = "top right"; // เอฟเฟกต์พุ่งจากบนขวา
+    }
+
+    // 3. จัดตำแหน่งซ้าย-ขวา (เหมือนเดิม)
+    // ความกว้างเมนูประมาณ 550px (ต้องปรับเลขนี้ถ้าเมนูกว้างขึ้น)
+    let leftPos = rect.right - 550 + 20; 
+    if(leftPos < 10) leftPos = 10; // กันตกจอซ้าย
+    menu.style.left = leftPos + 'px';
+
+    // 4. แสดงผลและเล่น Animation
+    overlay.classList.remove('hidden');
+    requestAnimationFrame(() => {
+        menu.classList.remove('scale-95', 'opacity-0');
+        menu.classList.add('scale-100', 'opacity-100');
+    });
+}
+
+// ฟังก์ชันปิดเมนู
+window.closeActionMenu = () => {
+    const menu = document.getElementById('action-popover');
+    const overlay = document.getElementById('popover-overlay');
+    
+    // Animation ปิด
+    menu.classList.remove('scale-100', 'opacity-100');
+    menu.classList.add('scale-95', 'opacity-0');
+    
+    currentActionUserId = null;
+
+    // รอ Animation จบแล้วค่อยซ่อน
+    setTimeout(() => {
+        menu.classList.add('hidden');
+        overlay.classList.add('hidden');
+    }, 200);
+}
+
+// เพิ่ม Event Listener: เมื่อ Scroll หน้าจอ ให้ปิดเมนู (เพื่อไม่ให้เมนูลอยค้างผิดที่)
+window.addEventListener('scroll', () => {
+    const menu = document.getElementById('action-popover');
+    if (!menu.classList.contains('hidden')) {
+        closeActionMenu();
+    }
+}, true);
+
+// ฟังก์ชัน สลับสถานะ รหัสเชิญ (Toggle Invite Code)
+window.toggleInviteCodeStatus = async (docId) => {
+    // ปิดเมนู Popover ก่อนเพื่อให้ดูสะอาดตา
+    closeActionMenu();
+
+    const user = allUsers.find(u => u.docId === docId);
+    if (!user) return;
+
+    // เช็คสถานะปัจจุบัน
+    const currentStatus = (user.invite_code_active !== false); // true = เปิด, false = ปิด
+    
+    // เตรียมข้อความถาม
+    const actionWord = currentStatus ? "ปิด (ระงับ)" : "เปิดใช้งาน";
+    const confirmMsg = `⚠️ ยืนยันการเปลี่ยนแปลง?\n\nคุณต้องการ "${actionWord}" รหัสเชิญของ ${user.username} ใช่หรือไม่?\n\n(หากปิด ผู้อื่นจะไม่สามารถกรอกรหัสเชิญของคนนี้เพื่อสมัครได้)`;
+
+    if (confirm(confirmMsg)) {
+        try {
+            // สลับค่า (Toggle)
+            const newStatus = !currentStatus;
+
+            // อัปเดตลง Database
+            await db.collection("users").doc(docId).update({
+                invite_code_active: newStatus
+            });
+
+            alert(`✅ ดำเนินการเรียบร้อย: รหัสเชิญสถานะเป็น "${newStatus ? 'เปิด' : 'ปิด'}" แล้ว`);
+
+        } catch (e) {
+            alert("เกิดข้อผิดพลาด: " + e.message);
+        }
+    }
+}
+// --- Modal ข้อมูลธนาคาร (Bank Info) ---
+const modalBankInfoHtml = `
+<div id="modal-bank-info" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-[120] backdrop-blur-sm font-sans">
+    <div class="bg-white rounded-lg shadow-2xl w-full max-w-2xl modal-scale-in flex flex-col max-h-[90vh]">
+        
+        <div class="flex justify-between items-center p-4 border-b bg-teal-50 shrink-0">
+            <h3 class="font-bold text-teal-800"><i class="fa-solid fa-building-columns text-teal-600"></i> ข้อมูลบัญชีธนาคาร</h3>
+            <button onclick="closeModal('modal-bank-info')" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="p-6 overflow-y-auto custom-scroll space-y-4 text-sm">
+            
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">ชื่อเจ้าของบัญชี</label>
+                    <input type="text" id="bank-holder" class="w-full border border-gray-300 rounded px-3 py-2 focus:border-teal-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">ชื่อธนาคาร</label>
+                    <input type="text" id="bank-name" class="w-full border border-gray-300 rounded px-3 py-2 focus:border-teal-500 focus:outline-none">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">รหัสธนาคาร (Bank Code)</label>
+                    <input type="text" id="bank-code" class="w-full border border-gray-300 rounded px-3 py-2 focus:border-teal-500 focus:outline-none">
+                </div>
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">เลขบัญชี</label>
+                    <input type="text" id="bank-acc-no" class="w-full border border-gray-300 rounded px-3 py-2 focus:border-teal-500 focus:outline-none font-bold text-blue-600">
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">เบอร์โทรศัพท์สำหรับเปิดบัญชี</label>
+                    <input type="text" id="bank-phone" class="w-full border border-gray-300 rounded px-3 py-2 focus:border-teal-500 focus:outline-none">
+                </div>
+                 <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">รหัสสาขา</label>
+                    <input type="text" id="bank-branch" class="w-full border border-gray-300 rounded px-3 py-2 focus:border-teal-500 focus:outline-none">
+                </div>
+            </div>
+            
+            <div>
+                <label class="block text-xs font-bold text-gray-600 mb-1">ที่อยู่สำหรับเปิดบัญชี</label>
+                <input type="text" id="bank-address" class="w-full border border-gray-300 rounded px-3 py-2 focus:border-teal-500 focus:outline-none">
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">IFSC / CPF</label>
+                    <input type="text" id="bank-ifsc" class="w-full border border-gray-300 rounded px-3 py-2 focus:border-teal-500 focus:outline-none">
+                </div>
+                 <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">บัญชีดิจิตอล</label>
+                    <input type="text" id="bank-digital" class="w-full border border-gray-300 rounded px-3 py-2 focus:border-teal-500 focus:outline-none">
+                </div>
+            </div>
+
+             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">หมายเลขกระเป๋าเงิน (Wallet No)</label>
+                    <input type="text" id="bank-wallet-phone" class="w-full border border-gray-300 rounded px-3 py-2 focus:border-teal-500 focus:outline-none">
+                </div>
+                 <div>
+                    <label class="block text-xs font-bold text-gray-600 mb-1">บัญชีกระเป๋าเงิน (Wallet Account)</label>
+                    <input type="text" id="bank-wallet-acc" class="w-full border border-gray-300 rounded px-3 py-2 focus:border-teal-500 focus:outline-none">
+                </div>
+            </div>
+
+        </div>
+
+        <div class="bg-gray-50 p-4 flex justify-center gap-3 border-t shrink-0">
+            <button onclick="preSaveBankInfo()" class="bg-teal-600 hover:bg-teal-700 text-white px-8 py-2.5 rounded shadow font-bold transition transform hover:scale-105">บันทึก</button>
+            <button onclick="closeModal('modal-bank-info')" class="bg-gray-300 hover:bg-gray-400 text-gray-700 px-8 py-2.5 rounded shadow font-bold transition">ยกเลิก</button>
+        </div>
+    </div>
+</div>
+
+<div id="modal-confirm-bank" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-[130] backdrop-blur-sm font-sans">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center transform transition-all scale-100 modal-scale-in">
+        <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-blue-100 mb-4">
+            <i class="fa-solid fa-file-invoice-dollar text-2xl text-blue-600"></i>
+        </div>
+        <h3 class="text-lg leading-6 font-bold text-gray-900 mb-2">ยืนยันการบันทึก</h3>
+        <p class="text-sm text-gray-500 mb-6">คุณต้องการบันทึกข้อมูลธนาคารหรือไม่?</p>
+        <div class="flex gap-3 justify-center">
+            <button onclick="executeSaveBankInfo()" class="w-full inline-flex justify-center rounded-lg border border-transparent shadow-sm px-4 py-2.5 bg-blue-600 text-base font-medium text-white hover:bg-blue-700 focus:outline-none transition">ยืนยัน</button>
+            <button onclick="closeModal('modal-confirm-bank')" class="w-full inline-flex justify-center rounded-lg border border-gray-300 shadow-sm px-4 py-2.5 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none transition">ยกเลิก</button>
+        </div>
+    </div>
+</div>
+`;
+
+document.body.insertAdjacentHTML('beforeend', modalBankInfoHtml);
+
+// --- 1. ฟังก์ชันเปิดหน้าต่างข้อมูลธนาคาร (Load Data) ---
+window.openBankInfoModal = (docId) => {
+    closeActionMenu(); // ปิดเมนูหลักก่อน
+    currentActionUserId = docId;
+
+    const user = allUsers.find(u => u.docId === docId);
+    if (!user) return;
+    
+    // ดึงข้อมูลเดิมมาใส่ (ถ้าไม่มีให้เป็นว่าง)
+    // สมมติเก็บข้อมูลไว้ใน object ชื่อ 'bank_info' ใน database
+    const info = user.bank_info || {};
+
+    document.getElementById('bank-holder').value = info.holder_name || '';
+    document.getElementById('bank-name').value = info.bank_name || '';
+    document.getElementById('bank-code').value = info.bank_code || '';
+    document.getElementById('bank-phone').value = info.bank_phone || '';
+    document.getElementById('bank-acc-no').value = info.account_number || '';
+    document.getElementById('bank-branch').value = info.branch_code || '';
+    document.getElementById('bank-address').value = info.address || '';
+    document.getElementById('bank-ifsc').value = info.ifsc_cpf || '';
+    document.getElementById('bank-digital').value = info.digital_account || '';
+    document.getElementById('bank-wallet-phone').value = info.wallet_phone || '';
+    document.getElementById('bank-wallet-acc').value = info.wallet_account || '';
+
+    const modal = document.getElementById('modal-bank-info');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+// --- 2. ฟังก์ชันกดปุ่มบันทึก (เรียกหน้าต่างยืนยัน) ---
+window.preSaveBankInfo = () => {
+    // เปิด Modal ยืนยัน
+    const modal = document.getElementById('modal-confirm-bank');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+// --- 3. ฟังก์ชันบันทึกจริง (Execute Save) ---
+window.executeSaveBankInfo = async () => {
+    if (!currentActionUserId) return;
+    closeModal('modal-confirm-bank'); // ปิดหน้าต่างยืนยัน
+
+    // เปลี่ยนปุ่มเป็น Loading
+    const saveBtn = document.querySelector('#modal-bank-info button.bg-teal-600');
+    const oldText = saveBtn.innerHTML;
+    saveBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> กำลังบันทึก...';
+    saveBtn.disabled = true;
+
+    try {
+        // เก็บข้อมูลลง Object
+        const bankData = {
+            holder_name: document.getElementById('bank-holder').value,
+            bank_name: document.getElementById('bank-name').value,
+            bank_code: document.getElementById('bank-code').value,
+            bank_phone: document.getElementById('bank-phone').value,
+            account_number: document.getElementById('bank-acc-no').value,
+            branch_code: document.getElementById('bank-branch').value,
+            address: document.getElementById('bank-address').value,
+            ifsc_cpf: document.getElementById('bank-ifsc').value,
+            digital_account: document.getElementById('bank-digital').value,
+            wallet_phone: document.getElementById('bank-wallet-phone').value,
+            wallet_account: document.getElementById('bank-wallet-acc').value
+        };
+
+        // อัปเดตลงใน Field 'bank_info' ของ User
+        await db.collection("users").doc(currentActionUserId).update({
+            bank_info: bankData
+        });
+
+        closeModal('modal-bank-info');
+        // alert("✅ บันทึกข้อมูลธนาคารเรียบร้อยแล้ว"); // ปิด alert ไปเพราะมี modal ยืนยันแล้ว
+
+    } catch (e) {
+        alert("เกิดข้อผิดพลาด: " + e.message);
+    } finally {
+        saveBtn.innerHTML = oldText;
+        saveBtn.disabled = false;
+    }
+}
+// --- Modal แก้ไขยอดเงินโดยตรง (Overwrite Balance) ---
+const modalEditBalanceHtml = `
+<div id="modal-edit-balance" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-[80] backdrop-blur-sm font-sans">
+    <div class="bg-white rounded-lg shadow-2xl w-full max-w-sm modal-scale-in overflow-hidden">
+        <div class="flex justify-between items-center p-4 border-b bg-blue-50">
+            <h3 class="font-bold text-gray-800"><i class="fa-solid fa-pen-to-square text-blue-600"></i> แก้ไขยอดเงิน (Set Balance)</h3>
+            <button onclick="closeModal('modal-edit-balance')" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="p-6 space-y-4">
+            
+            <div class="flex justify-between text-xs text-gray-500 bg-gray-50 p-2 rounded border border-gray-100">
+                <span>ยอดที่ติดสถานะ (Frozen):</span>
+                <span id="edit-bal-frozen" class="font-bold text-red-500">0.00</span>
+            </div>
+
+            <div>
+                <label class="block text-xs font-bold text-gray-700 mb-1">ยอดเงินในกระเป๋า (Total Balance)</label>
+                <div class="relative">
+                    <input type="number" id="edit-bal-input" step="0.01" class="w-full border-2 border-blue-100 rounded-lg px-4 py-2 text-lg font-bold text-blue-700 focus:outline-none focus:border-blue-500 bg-white" placeholder="0.00">
+                    <span class="absolute right-4 top-3 text-xs text-gray-400">THB</span>
+                </div>
+                <p class="text-[10px] text-gray-400 mt-1">
+                    * ใส่ตัวเลขใหม่เพื่อ "ทับ" ยอดเดิมทันที (ไม่ใช่การบวกเพิ่ม)
+                </p>
+            </div>
+
+        </div>
+        <div class="bg-gray-50 p-4 flex justify-center gap-3 border-t">
+            <button onclick="saveEditBalance()" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded text-sm font-bold shadow hover:shadow-md transition">บันทึกยอดใหม่</button>
+            <button onclick="closeModal('modal-edit-balance')" class="bg-gray-300 hover:bg-gray-400 text-gray-700 px-6 py-2 rounded text-sm font-bold shadow hover:shadow-md transition">ยกเลิก</button>
+        </div>
+    </div>
+</div>`;
+
+document.body.insertAdjacentHTML('beforeend', modalEditBalanceHtml);
+
+// 1. ฟังก์ชันเปิดหน้าต่างแก้ไขยอด
+window.openEditBalanceModal = (docId) => {
+    // ปิดเมนู Popover ก่อน
+    closeActionMenu();
+    
+    currentActionUserId = docId;
+    const user = allUsers.find(u => u.docId === docId);
+    if (!user) return;
+
+    // คำนวณยอด Frozen (ถ้ามี logic นี้) หรือใส่ 0 ถ้าไม่มี
+    const frozen = frozenMap[user.username] || 0;
+    
+    // ตั้งค่าใน Modal
+    document.getElementById('edit-bal-frozen').innerText = frozen.toLocaleString();
+    
+    // ดึงยอดเงินปัจจุบัน (Total Balance) มาใส่ในช่อง Input
+    // เพื่อให้แอดมินแก้จากเลขเดิมได้เลย
+   document.getElementById('edit-bal-input').value = parseFloat(user.balance || 0).toFixed(2);
+    const modal = document.getElementById('modal-edit-balance');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+// 2. ฟังก์ชันบันทึกยอดเงินใหม่ (Overwrite)
+// 2. ฟังก์ชันบันทึกยอดเงินใหม่ (Overwrite) - พร้อมปัดเศษ 2 ตำแหน่ง
+        window.saveEditBalance = async () => {
+            if (!currentActionUserId) return;
+
+            const newValStr = document.getElementById('edit-bal-input').value;
+            let newVal = parseFloat(newValStr);
+
+            if (isNaN(newVal)) {
+                alert("กรุณาระบุตัวเลขที่ถูกต้อง");
+                return;
+            }
+
+            // ✅✅✅ ปัดเศษให้เหลือ 2 ตำแหน่งเป๊ะๆ
+            newVal = Number(newVal.toFixed(2));
+
+            if(!confirm(`⚠️ ยืนยันการแก้ไขยอดเงิน?\n\nยอดเงินเดิมจะถูกลบ และแทนที่ด้วยยอด ${newVal.toLocaleString()} ทันที`)) {
+                return;
+            }
+
+            try {
+                // อัปเดตยอดเงินใน Database ทันที (Set Balance)
+                await db.collection("users").doc(currentActionUserId).update({
+                    balance: newVal
+                });
+
+                closeModal('modal-edit-balance');
+                alert("✅ บันทึกยอดเงินใหม่เรียบร้อยแล้ว");
+                
+                // รีโหลดตาราง
+                if(typeof renderTable === 'function') renderTable();
+
+            } catch (e) {
+                alert("เกิดข้อผิดพลาด: " + e.message);
+            }
+        }
+// --- Modal จัดการผู้ใช้แบบละเอียด (Manage User Full) ---
+const modalManageUserHtml = `
+<div id="modal-manage-user" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-[120] backdrop-blur-sm font-sans">
+    <div class="bg-white rounded-lg shadow-2xl w-full max-w-2xl modal-scale-in flex flex-col max-h-[90vh]">
+        
+        <div class="flex justify-between items-center p-4 border-b bg-gray-50 shrink-0">
+            <h3 class="font-bold text-gray-800"><i class="fa-solid fa-user-gear text-teal-600"></i> แก้ไขข้อมูลผู้ใช้</h3>
+            <button onclick="closeModal('modal-manage-user')" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+
+        <div class="p-6 overflow-y-auto custom-scroll space-y-4 text-sm">
+            
+            <div class="flex items-center gap-4">
+                <label class="w-40 text-right font-bold text-gray-600">ตัวแทน (Agent)</label>
+                <input type="text" value="Platform (System)" disabled class="flex-1 border border-gray-200 bg-gray-100 text-gray-500 rounded px-3 py-2 cursor-not-allowed">
+            </div>
+
+            <div class="flex items-center gap-4">
+                <label class="w-40 text-right font-bold text-gray-600 text-xs">ตัวแทนระดับที่สอง <span class="text-red-500">*</span></label>
+                <input type="text" id="mng-upline" class="flex-1 border border-gray-300 rounded px-3 py-2 focus:border-teal-500 focus:outline-none">
+            </div>
+
+            <div class="flex items-center gap-4">
+                <label class="w-40 text-right font-bold text-gray-600">ชื่อ-นามสกุล (หลังบ้าน)</label>
+                <input type="text" id="mng-nameAdmin" placeholder="ระบุชื่อสำหรับแอดมินดู" class="flex-1 border border-gray-300 rounded px-3 py-2 focus:border-teal-500 focus:outline-none bg-blue-50/50 text-blue-800 font-bold">
+            </div>
+
+            <div class="flex items-center gap-4">
+                <label class="w-40 text-right font-bold text-gray-600">ชื่อผู้ใช้ <span class="text-red-500">*</span></label>
+                <input type="text" id="mng-username" disabled class="flex-1 border border-gray-200 bg-gray-100 text-gray-500 rounded px-3 py-2 cursor-not-allowed font-bold">
+            </div>
+
+            <div class="flex items-center gap-4">
+                <label class="w-40 text-right font-bold text-gray-600">หมายเลขโทรศัพท์</label>
+                <input type="text" id="mng-phone" class="flex-1 border border-gray-300 rounded px-3 py-2 focus:border-teal-500 focus:outline-none">
+            </div>
+
+            <div class="flex items-center gap-4">
+                <label class="w-40 text-right font-bold text-gray-600">คะแนนเครดิต</label>
+                <input type="number" id="mng-credit" class="flex-1 border border-gray-300 rounded px-3 py-2 focus:border-teal-500 focus:outline-none">
+            </div>
+
+            <hr class="border-gray-100">
+
+            <div class="flex items-center gap-4">
+                <label class="w-40 text-right font-bold text-gray-600">ยอดคงเหลือในบัญชี</label>
+                <input type="number" step="0.01" id="mng-balance" class="flex-1 border border-gray-300 rounded px-3 py-2 font-bold text-blue-600 focus:border-teal-500 focus:outline-none">
+            </div>
+
+            <div class="flex items-center gap-4">
+                <label class="w-40 text-right font-bold text-gray-600">ปริมาณแช่แข็ง/ติดลบ</label>
+                <div class="flex-1 relative">
+                    <input type="text" id="mng-frozen" readonly class="w-full border border-red-200 bg-red-50 text-red-600 font-bold rounded px-3 py-2 cursor-not-allowed">
+                    <span class="absolute right-3 top-2 text-[10px] text-red-400">*คำนวณจากออเดอร์</span>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-4">
+                <label class="w-40 text-right font-bold text-gray-600">ยอดที่ใช้ได้จริง</label>
+                <input type="text" id="mng-available" readonly class="flex-1 border border-green-200 bg-green-50 text-green-700 font-bold rounded px-3 py-2 cursor-not-allowed">
+            </div>
+
+            <div class="flex items-center gap-4">
+                <label class="w-40 text-right font-bold text-gray-600">ระดับสมาชิก <span class="text-red-500">*</span></label>
+                <select id="mng-level" class="flex-1 border border-gray-300 rounded px-3 py-2 focus:border-teal-500 focus:outline-none bg-white"></select>
+            </div>
+
+            <div class="flex items-center gap-4">
+                <label class="w-40 text-right font-bold text-gray-600">สถานะการทำธุรกรรม</label>
+                <select id="mng-status" class="flex-1 border border-gray-300 rounded px-3 py-2 focus:border-teal-500 focus:outline-none bg-white font-bold">
+                    <option value="normal" class="text-green-600">ปกติ (Normal)</option>
+                    <option value="blocked" class="text-red-600">⛔ บล็อก (Blocked)</option>
+                </select>
+            </div>
+
+            <hr class="border-gray-100">
+
+            <div class="flex items-center gap-4">
+                <label class="w-40 text-right font-bold text-gray-600 text-xs">รหัสผ่านเข้าสู่ระบบ</label>
+                <input type="text" id="mng-password" placeholder="เว้นว่างไว้ถ้าไม่ต้องการเปลี่ยน" class="flex-1 border border-gray-300 rounded px-3 py-2 focus:border-teal-500 focus:outline-none bg-yellow-50 placeholder-gray-400">
+            </div>
+
+            <div class="flex items-center gap-4">
+                <label class="w-40 text-right font-bold text-gray-600 text-xs">รหัสผ่านสำหรับถอนเงิน</label>
+                <input type="text" id="mng-wd-password" placeholder="เว้นว่างไว้ถ้าไม่ต้องการเปลี่ยน" class="flex-1 border border-gray-300 rounded px-3 py-2 focus:border-teal-500 focus:outline-none bg-yellow-50 placeholder-gray-400">
+            </div>
+
+            <div class="flex items-center gap-4">
+                <label class="w-40 text-right font-bold text-gray-600 text-xs">งานที่กำลังดำเนิน (วัน)</label>
+              <input type="number" id="mng-tasks" class="flex-1 border border-gray-300 rounded px-3 py-2 focus:border-teal-500 focus:outline-none bg-white font-bold text-orange-600">
+            </div>
+
+            <div class="bg-orange-50 p-3 rounded border border-orange-200">
+                <div class="flex items-center gap-2 mb-2">
+                    <i class="fa-solid fa-dice text-orange-500"></i>
+                    <span class="text-xs font-bold text-orange-700">ตั้งค่าสุ่มจำนวนสินค้าต่อออเดอร์ (Random Qty)</span>
+                </div>
+                <div class="flex gap-4">
+                    <div class="flex-1 flex items-center gap-2">
+                        <label class="text-xs font-bold text-gray-600">ต่ำสุด (Min)</label>
+                        <input type="number" id="mng-qty-min" placeholder="1" class="w-full border border-orange-300 rounded px-2 py-1 text-center font-bold text-gray-700 focus:outline-none">
+                    </div>
+                    <div class="flex-1 flex items-center gap-2">
+                        <label class="text-xs font-bold text-gray-600">สูงสุด (Max)</label>
+                        <input type="number" id="mng-qty-max" placeholder="300" class="w-full border border-orange-300 rounded px-2 py-1 text-center font-bold text-gray-700 focus:outline-none">
+                    </div>
+                </div>
+                <p class="text-[10px] text-orange-400 mt-1">* ระบบจะสุ่มจำนวนสินค้าให้อยู่ในช่วงนี้ แต่ราคาจะไม่เกินเงินคงเหลือ</p>
+            </div>
+
+            <div class="flex items-start gap-4">
+                <label class="w-40 text-right font-bold text-gray-600 mt-2">หมายเหตุ</label>
+                <textarea id="mng-memo" rows="2" class="flex-1 border border-gray-300 rounded px-3 py-2 focus:border-teal-500 focus:outline-none"></textarea>
+            </div>
+
+        </div>
+
+        <div class="bg-gray-50 p-4 flex justify-center gap-3 border-t shrink-0">
+            <button onclick="saveManageUser()" class="bg-teal-600 hover:bg-teal-700 text-white px-8 py-2.5 rounded shadow font-bold transition transform hover:scale-105">บันทึกข้อมูล</button>
+            <button onclick="closeModal('modal-manage-user')" class="bg-gray-300 hover:bg-gray-400 text-gray-700 px-8 py-2.5 rounded shadow font-bold transition">ยกเลิก</button>
+        </div>
+    </div>
+</div>`;
+document.body.insertAdjacentHTML('beforeend', modalManageUserHtml);
+// --- 1. ฟังก์ชันเปิดหน้าต่างจัดการ (Load Data) ---
+// --- 1. ฟังก์ชันเปิดหน้าต่างจัดการ (Load Data) ---
+window.openManageUserModal = (docId) => {
+    closeActionMenu(); // ปิดเมนูลอยก่อน
+    currentActionUserId = docId;
+
+    const user = allUsers.find(u => u.docId === docId);
+    if (!user) return;
+
+    // 1. โหลด Levels ลง Dropdown
+    const levelSelect = document.getElementById('mng-level');
+    if (levelSelect.options.length === 0) {
+        for (const [lvlName, count] of Object.entries(levelMap)) {
+            const opt = document.createElement('option');
+            opt.value = lvlName;
+            opt.innerText = lvlName;
+            levelSelect.appendChild(opt);
+        }
+        if(levelSelect.options.length === 0) {
+             ['VIP 1', 'VIP 2', 'VIP 3', 'VIP 4'].forEach(l => {
+                 const opt = document.createElement('option'); opt.value = l; opt.innerText = l; levelSelect.appendChild(opt);
+             });
+        }
+    }
+
+    // 2. Map ข้อมูลลง Input Fields
+    document.getElementById('mng-upline').value = user.upline || '';
+    
+    // ✅ เพิ่ม: ดึงค่า nameAdmin มาใส่ (ถ้าไม่มีให้ว่าง)
+    document.getElementById('mng-nameAdmin').value = user.nameAdmin || ''; 
+    
+    document.getElementById('mng-username').value = user.username || '';
+    document.getElementById('mng-phone').value = user.phone || '';
+    document.getElementById('mng-credit').value = user.credit || 100;
+    document.getElementById('mng-qty-min').value = user.random_qty_min || 1;
+    document.getElementById('mng-qty-max').value = user.random_qty_max || 1;
+    document.getElementById('mng-balance').value = parseFloat(user.balance || 0).toFixed(2);
+    
+    const totalBalance = parseFloat(user.balance || 0);
+    const frozenVal = frozenMap[user.username] || 0; 
+    const availableVal = totalBalance - frozenVal;
+
+    document.getElementById('mng-frozen').value = frozenVal.toLocaleString(); 
+    document.getElementById('mng-available').value = availableVal.toLocaleString();
+
+    document.getElementById('mng-level').value = user.level || 'VIP 1';
+    document.getElementById('mng-status').value = (user.account_status === 'blocked') ? 'blocked' : 'normal';
+
+    document.getElementById('mng-password').value = user.password || ''; 
+    document.getElementById('mng-wd-password').value = user.withdraw_password || user.password || ''; 
+    document.getElementById('mng-tasks').value = user.todayCount || 0;
+    document.getElementById('mng-memo').value = user.memo || '';
+
+    const modal = document.getElementById('modal-manage-user');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+// --- 2. ฟังก์ชันบันทึกข้อมูล (Save Data) ---
+// --- 2. ฟังก์ชันเมื่อกดปุ่ม "บันทึกข้อมูล" ในฟอร์ม ---
+window.saveManageUser = () => {
+    if (!currentActionUserId) return;
+    
+    // เปิดหน้าต่างยืนยันสวยๆ แทน alert เดิม
+    const modal = document.getElementById('modal-confirm-save');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+// --- 3. ฟังก์ชันทำงานจริง (เมื่อกดยืนยันในหน้าต่างลอย) ---
+// --- 3. ฟังก์ชันทำงานจริง (เมื่อกดยืนยันในหน้าต่างลอย) ---
+window.executeSaveUser = async () => {
+    // ปิดหน้าต่างยืนยันก่อน
+    closeModal('modal-confirm-save');
+
+    const saveBtn = document.querySelector('#modal-manage-user button.bg-teal-600');
+    const oldText = saveBtn.innerHTML;
+    saveBtn.innerHTML = '<i class="fa-solid fa-circle-notch fa-spin"></i> กำลังบันทึก...';
+    saveBtn.disabled = true;
+
+    try {
+        // เตรียมข้อมูลที่จะอัปเดต
+        const updateData = {
+            upline: document.getElementById('mng-upline').value,
+            
+            // ✅ เพิ่ม: บันทึก nameAdmin ลงฐานข้อมูล
+            nameAdmin: document.getElementById('mng-nameAdmin').value,
+            
+            // username ไม่ต้องอัปเดตเพราะเราล็อกไว้แล้ว (หรือถ้าจะส่งไปก็ค่าเดิม)
+            // username: document.getElementById('mng-username').value, 
+
+            phone: document.getElementById('mng-phone').value,
+            credit: parseInt(document.getElementById('mng-credit').value) || 0,
+            balance: parseFloat(document.getElementById('mng-balance').value) || 0,
+            frozen_balance: parseFloat(document.getElementById('mng-frozen').value) || 0,
+            level: document.getElementById('mng-level').value,
+            account_status: document.getElementById('mng-status').value,
+            memo: document.getElementById('mng-memo').value,
+            todayCount: parseInt(document.getElementById('mng-tasks').value) || 0,
+            random_qty_min: parseInt(document.getElementById('mng-qty-min').value) || 1,
+            random_qty_max: parseInt(document.getElementById('mng-qty-max').value) || 1,
+        };
+
+        const newPass = document.getElementById('mng-password').value;
+        if (newPass.trim() !== "") updateData.password = newPass;
+
+        const newWdPass = document.getElementById('mng-wd-password').value;
+        if (newWdPass.trim() !== "") updateData.withdraw_password = newWdPass;
+
+        await db.collection("users").doc(currentActionUserId).update(updateData);
+
+        closeModal('modal-manage-user');
+        
+        // ถ้ามีฟังก์ชัน showAdminAlert ให้ใช้
+        if (typeof showAdminAlert === 'function') {
+            showAdminAlert('สำเร็จ', 'บันทึกข้อมูลผู้ใช้เรียบร้อยแล้ว', 'success');
+        } else {
+            alert("✅ อัพเดทข้อมูลเรียบร้อย");
+        }
+
+    } catch (e) {
+        alert("เกิดข้อผิดพลาด: " + e.message);
+    } finally {
+        saveBtn.innerHTML = oldText;
+        saveBtn.disabled = false;
+    }
+}
+// --- Modal ยืนยันการบันทึก (Custom Confirm) ---
+const modalConfirmSaveHtml = `
+<div id="modal-confirm-save" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-[130] backdrop-blur-sm font-sans">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center transform transition-all scale-100 modal-scale-in">
+        
+        <div class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-teal-100 mb-4">
+            <i class="fa-solid fa-floppy-disk text-2xl text-teal-600"></i>
+        </div>
+
+        <h3 class="text-lg leading-6 font-bold text-gray-900 mb-2">ยืนยันการบันทึก</h3>
+        <p class="text-sm text-gray-500 mb-6">
+            ต้องการอัพเดท หรือไม่?
+        </p>
+
+        <div class="flex gap-3 justify-center">
+            <button onclick="executeSaveUser()" class="w-full inline-flex justify-center rounded-lg border border-transparent shadow-sm px-4 py-2.5 bg-teal-600 text-base font-medium text-white hover:bg-teal-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-teal-500 sm:text-sm transition">
+                ยืนยัน
+            </button>
+            <button onclick="closeModal('modal-confirm-save')" class="w-full inline-flex justify-center rounded-lg border border-gray-300 shadow-sm px-4 py-2.5 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500 sm:text-sm transition">
+                ยกเลิก
+            </button>
+        </div>
+    </div>
+</div>`;
+
+document.body.insertAdjacentHTML('beforeend', modalConfirmSaveHtml);
+
+// --- Modal ประวัติธุรกรรมแบบรวม (Full History) ---
+const modalFullHistoryHtml = `
+<div id="modal-full-history" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-[130] backdrop-blur-sm font-sans">
+    <div class="bg-white rounded-lg shadow-2xl w-full max-w-5xl h-[85vh] flex flex-col modal-scale-in">
+        
+        <div class="flex justify-between items-center p-4 border-b bg-cyan-600 text-white shrink-0 rounded-t-lg">
+            <div>
+                <h3 class="font-bold text-lg"><i class="fa-solid fa-list-ul mr-2"></i> ประวัติธุรกรรมรวม (Transaction History)</h3>
+                <p class="text-xs opacity-80 mt-1">ผู้ใช้: <span id="hist-username" class="font-bold text-yellow-300">...</span> (รวม ออเดอร์ / เติม / ถอน)</p>
+            </div>
+            <button onclick="closeModal('modal-full-history')" class="text-white hover:text-gray-200 bg-white/20 hover:bg-white/30 rounded-full w-8 h-8 flex items-center justify-center transition">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+        </div>
+
+        <div class="bg-gray-50 p-3 border-b flex gap-3 text-xs shrink-0">
+            <span class="px-3 py-1 bg-white border rounded shadow-sm font-bold text-gray-600">ทั้งหมด: <span id="hist-total-count">0</span> รายการ</span>
+            <div class="flex-1"></div>
+            <div class="flex items-center gap-2">
+                <button onclick="changeHistoryPage(-1)" class="px-2 py-1 bg-white border rounded hover:bg-gray-100 disabled:opacity-50" id="btn-prev-top"><i class="fa-solid fa-chevron-left"></i></button>
+                <span id="hist-page-info-top" class="font-bold text-gray-600">หน้า 1 / 1</span>
+                <button onclick="changeHistoryPage(1)" class="px-2 py-1 bg-white border rounded hover:bg-gray-100 disabled:opacity-50" id="btn-next-top"><i class="fa-solid fa-chevron-right"></i></button>
+            </div>
+        </div>
+
+        <div class="flex-1 overflow-y-auto custom-scroll bg-white relative">
+            <table class="w-full text-left border-collapse">
+                <thead class="sticky top-0 bg-gray-100 shadow-sm z-10">
+                    <tr class="text-xs text-gray-600 font-bold uppercase tracking-wider">
+                        <th class="p-3 border-b text-center w-16">#</th>
+                        <th class="p-3 border-b">เวลา (Time)</th>
+                        <th class="p-3 border-b text-center">ประเภท (Type)</th>
+                        <th class="p-3 border-b">รายละเอียด (Detail / ID)</th>
+                        <th class="p-3 border-b text-right">จำนวนเงิน (Amount)</th>
+                        <th class="p-3 border-b text-center">สถานะ (Status)</th>
+                    </tr>
+                </thead>
+                <tbody id="full-history-body" class="text-xs text-gray-700">
+                    </tbody>
+            </table>
+            
+            <div id="hist-loading" class="absolute inset-0 bg-white/80 flex flex-col items-center justify-center z-20 hidden">
+                <i class="fa-solid fa-circle-notch fa-spin text-4xl text-cyan-600 mb-2"></i>
+                <span class="text-gray-500 font-bold">กำลังโหลดข้อมูล...</span>
+            </div>
+        </div>
+
+        <div class="p-3 border-t bg-gray-50 shrink-0 flex justify-center items-center gap-4">
+            <button onclick="changeHistoryPage(-1)" class="px-4 py-2 bg-white border border-gray-300 rounded shadow-sm hover:bg-gray-100 text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed" id="btn-prev">
+                <i class="fa-solid fa-chevron-left mr-1"></i> ก่อนหน้า
+            </button>
+            <span id="hist-page-info" class="font-bold text-gray-700 text-sm">หน้า 1 จาก 1</span>
+            <button onclick="changeHistoryPage(1)" class="px-4 py-2 bg-white border border-gray-300 rounded shadow-sm hover:bg-gray-100 text-xs font-bold disabled:opacity-50 disabled:cursor-not-allowed" id="btn-next">
+                ถัดไป <i class="fa-solid fa-chevron-right ml-1"></i>
+            </button>
+        </div>
+    </div>
+</div>`;
+
+document.body.insertAdjacentHTML('beforeend', modalFullHistoryHtml);
+// --- ตัวแปรสำหรับระบบประวัติรวม ---
+// --- ตัวแปรสำหรับระบบประวัติรวม ---
+let fullHistoryData = [];
+let currentHistoryPage = 1;
+const historyPerPage = 10;
+
+// 1. ฟังก์ชันเปิดหน้าต่างและโหลดข้อมูล (ดึงทุกสถานะรวมถึง Frozen/Rejected)
+window.openFullUserHistory = async (docId) => {
+    closeActionMenu(); 
+    currentActionUserId = docId;
+    
+    const user = allUsers.find(u => u.docId === docId);
+    if(!user) return;
+
+    document.getElementById('hist-username').innerText = user.username;
+    
+    const modal = document.getElementById('modal-full-history');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+    document.getElementById('hist-loading').classList.remove('hidden');
+
+    try {
+        // ดึงข้อมูล 3 ส่วน (คำสั่งจะดึงมาทั้งหมด ไม่สนสถานะ เพื่อให้เห็นยอด Frozen ด้วย)
+        const [ordersSnap, withdrawSnap, rechargeSnap] = await Promise.all([
+            db.collection("orders").where("username", "==", user.username).orderBy("timestamp", "desc").limit(100).get(),
+            db.collection("withdrawals").where("user_id", "==", docId).orderBy("timestamp", "desc").limit(50).get(),
+            db.collection("recharges").where("user_id", "==", docId).orderBy("timestamp", "desc").limit(50).get()
+        ]);
+
+        fullHistoryData = [];
+
+        // 1. จัดการข้อมูลออเดอร์ (รวม Frozen)
+        ordersSnap.forEach(doc => {
+            const d = doc.data();
+            fullHistoryData.push({
+                type: 'order',
+                timestamp: d.timestamp,
+                amount: d.amount,
+                profit: d.commission,
+                status: d.status, // completed, pending, frozen
+                detail: d.order_id || d.product_name,
+                raw: d
+            });
+        });
+
+        // 2. จัดการการถอนเงิน (รวม Rejected)
+        withdrawSnap.forEach(doc => {
+            const d = doc.data();
+            fullHistoryData.push({
+                type: 'withdraw',
+                timestamp: d.timestamp,
+                amount: d.amount,
+                status: d.status, // approved, pending, rejected
+                detail: `${d.bank_name} (${d.account_number})`,
+                raw: d
+            });
+        });
+
+        // 3. จัดการการเติมเงิน (รวม Rejected)
+        rechargeSnap.forEach(doc => {
+            const d = doc.data();
+            fullHistoryData.push({
+                type: 'recharge',
+                timestamp: d.timestamp,
+                amount: d.amount,
+                status: d.status,
+                detail: d.method || 'Manual Deposit',
+                raw: d
+            });
+        });
+
+        // เรียงลำดับตามเวลา (ใหม่สุดขึ้นก่อน)
+        fullHistoryData.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+
+        // อัปเดตตัวเลขรวม
+        document.getElementById('hist-total-count').innerText = fullHistoryData.length;
+        
+        currentHistoryPage = 1;
+        renderHistoryPage();
+
+    } catch (e) {
+        console.error(e);
+        alert("โหลดข้อมูลไม่สำเร็จ: " + e.message);
+    } finally {
+        document.getElementById('hist-loading').classList.add('hidden');
+    }
+}
+
+// 2. ฟังก์ชันแสดงผล (เน้นสีรายการที่มีปัญหา)
+window.renderHistoryPage = () => {
+    const tbody = document.getElementById('full-history-body');
+    tbody.innerHTML = '';
+
+    const totalPages = Math.ceil(fullHistoryData.length / historyPerPage) || 1;
+    const start = (currentHistoryPage - 1) * historyPerPage;
+    const end = start + historyPerPage;
+    const pageData = fullHistoryData.slice(start, end);
+
+    if (pageData.length === 0) {
+        tbody.innerHTML = `<tr><td colspan="6" class="text-center p-8 text-gray-400">ไม่พบประวัติธุรกรรม</td></tr>`;
+    } else {
+        pageData.forEach((item, index) => {
+            const timeStr = new Date(item.timestamp).toLocaleString('th-TH');
+            let typeHtml = '', amountHtml = '', statusHtml = '', rowClass = '';
+
+            // --- 📦 กรณีออเดอร์ ---
+            if (item.type === 'order') {
+                typeHtml = `<span class="bg-blue-100 text-blue-700 px-2 py-1 rounded font-bold text-[10px]">📦 คำสั่งซื้อ</span>`;
+                
+                const comm = item.profit ? `<span class="text-green-600 text-[10px] block">+${parseFloat(item.profit).toLocaleString()} (ค่าคอม)</span>` : '';
+                amountHtml = `<div class="font-bold text-gray-700">฿${parseFloat(item.amount).toLocaleString()}</div>${comm}`;
+                
+                if(item.status === 'frozen') {
+                    // 🔥 เน้นสีแดงสำหรับ Frozen
+                    statusHtml = `<span class="bg-red-100 text-red-600 px-2 py-1 rounded border border-red-200 font-bold text-[10px]"><i class="fa-solid fa-snowflake"></i> ถูกแช่แข็ง</span>`;
+                    rowClass = 'bg-red-50'; // ไฮไลท์ทั้งแถว
+                } else if(item.status === 'completed') {
+                    statusHtml = `<span class="text-green-600 font-bold text-[10px]">สำเร็จ</span>`;
+                } else {
+                    statusHtml = `<span class="text-orange-500 text-[10px]">รอส่งงาน</span>`;
+                }
+
+            // --- 💸 กรณีถอนเงิน ---
+            } else if (item.type === 'withdraw') {
+                typeHtml = `<span class="bg-red-100 text-red-700 px-2 py-1 rounded font-bold text-[10px]">💸 ถอนเงิน</span>`;
+                amountHtml = `<span class="text-red-600 font-bold">-฿${parseFloat(item.amount).toLocaleString()}</span>`;
+                
+                if(item.status === 'rejected' || item.status === 'cancelled') {
+                    // ❌ เน้นสีแดงสำหรับ Rejected
+                    statusHtml = `<span class="bg-red-100 text-red-600 px-2 py-1 rounded border border-red-200 font-bold text-[10px]"><i class="fa-solid fa-ban"></i> ถูกปฏิเสธ</span>`;
+                    rowClass = 'bg-red-50/50';
+                } else if(item.status === 'approved') {
+                    statusHtml = `<span class="text-green-600 font-bold text-[10px]"><i class="fa-solid fa-check"></i> อนุมัติ</span>`;
+                } else {
+                    statusHtml = `<span class="text-orange-500 text-[10px]">รอตรวจสอบ</span>`;
+                }
+
+            // --- 💰 กรณีเติมเงิน ---
+            } else if (item.type === 'recharge') {
+                typeHtml = `<span class="bg-green-100 text-green-700 px-2 py-1 rounded font-bold text-[10px]">💰 เติมเงิน</span>`;
+                amountHtml = `<span class="text-green-600 font-bold">+฿${parseFloat(item.amount).toLocaleString()}</span>`;
+                
+                if(item.status === 'rejected') {
+                    statusHtml = `<span class="bg-gray-100 text-gray-500 px-2 py-1 rounded border border-gray-200 font-bold text-[10px]"><i class="fa-solid fa-xmark"></i> ล้มเหลว</span>`;
+                } else if(item.status === 'approved') {
+                    statusHtml = `<span class="text-green-600 font-bold text-[10px]"><i class="fa-solid fa-check"></i> สำเร็จ</span>`;
+                } else {
+                    statusHtml = `<span class="text-orange-500 text-[10px]">รอดำเนินการ</span>`;
+                }
+            }
+
+            tbody.innerHTML += `
+                <tr class="border-b hover:bg-gray-100 transition ${rowClass}">
+                    <td class="p-3 text-center text-gray-400">${start + index + 1}</td>
+                    <td class="p-3 text-[11px] font-mono text-gray-500">${timeStr}</td>
+                    <td class="p-3 text-center">${typeHtml}</td>
+                    <td class="p-3 text-[11px]">
+                        <span class="text-gray-700 block truncate w-32" title="${item.detail}">${item.detail}</span>
+                    </td>
+                    <td class="p-3 text-right">${amountHtml}</td>
+                    <td class="p-3 text-center">${statusHtml}</td>
+                </tr>
+            `;
+        });
+    }
+
+    updateHistoryPagination(totalPages);
+}
+
+// 3. ฟังก์ชันควบคุมปุ่มเปลี่ยนหน้า
+window.changeHistoryPage = (direction) => {
+    const totalPages = Math.ceil(fullHistoryData.length / historyPerPage) || 1;
+    const newPage = currentHistoryPage + direction;
+
+    if (newPage > 0 && newPage <= totalPages) {
+        currentHistoryPage = newPage;
+        renderHistoryPage();
+    }
+}
+
+function updateHistoryPagination(totalPages) {
+    const text = `หน้า ${currentHistoryPage} จาก ${totalPages}`;
+    document.getElementById('hist-page-info').innerText = text;
+    document.getElementById('hist-page-info-top').innerText = text;
+
+    const prevDisabled = currentHistoryPage === 1;
+    const nextDisabled = currentHistoryPage === totalPages;
+
+    document.getElementById('btn-prev').disabled = prevDisabled;
+    document.getElementById('btn-next').disabled = nextDisabled;
+    
+    // ปุ่มตัวบนด้วย
+    document.getElementById('btn-prev-top').disabled = prevDisabled;
+    document.getElementById('btn-next-top').disabled = nextDisabled;
+}
+
+// --- Modal ยืนยันการกระทำ (Universal Action Confirm) ---
+const modalActionConfirmHtml = `
+<div id="modal-action-confirm" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-[140] backdrop-blur-sm font-sans">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center transform transition-all scale-100 modal-scale-in">
+        
+        <div id="action-icon-bg" class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-100 mb-4 transition-colors">
+            <i id="action-icon" class="fa-solid fa-triangle-exclamation text-2xl text-red-600"></i>
+        </div>
+
+        <h3 id="action-title" class="text-lg leading-6 font-bold text-gray-900 mb-2">ยืนยันการทำรายการ</h3>
+        <p id="action-desc" class="text-sm text-gray-500 mb-6">
+            คุณแน่ใจหรือไม่ที่จะดำเนินการนี้?
+        </p>
+
+        <div class="flex gap-3 justify-center">
+            <button onclick="executePendingAction()" id="action-btn-confirm" class="w-full inline-flex justify-center rounded-lg border border-transparent shadow-sm px-4 py-2.5 bg-red-600 text-base font-medium text-white hover:bg-red-700 focus:outline-none transition">
+                ยืนยัน
+            </button>
+            <button onclick="closeModal('modal-action-confirm')" class="w-full inline-flex justify-center rounded-lg border border-gray-300 shadow-sm px-4 py-2.5 bg-white text-base font-medium text-gray-700 hover:bg-gray-50 focus:outline-none transition">
+                ยกเลิก
+            </button>
+        </div>
+    </div>
+</div>`;
+
+document.body.insertAdjacentHTML('beforeend', modalActionConfirmHtml);
+
+// ตัวแปรเก็บฟังก์ชันที่จะทำเมื่อกดยืนยัน
+let pendingActionCallback = null;
+
+// --- 1. ฟังก์ชันเตรียมลบ (Ask Delete) ---
+// --- 1. ฟังก์ชันเตรียมลบ (Ask Delete) - อัปเดตใหม่ ---
+window.askDeleteUser = (docId) => {
+    closeActionMenu();
+    const user = allUsers.find(u => u.docId === docId);
+    if (!user) return;
+
+    setupActionModal({
+        title: '⚠️ ยืนยันการลบผู้ใช้',
+        desc: `คุณต้องการลบผู้ใช้ "${user.username}" ออกจากระบบถาวรหรือไม่? <br><span class="text-xs text-red-500">*ข้อมูลทั้งหมดจะหายไปและกู้คืนไม่ได้</span>`,
+        icon: 'fa-trash-can',
+        colorClass: 'bg-red-600 hover:bg-red-700',
+        iconBgClass: 'bg-red-100',
+        iconColorClass: 'text-red-600',
+        callback: async () => {
+            await db.collection("users").doc(docId).delete();
+            // ✅ ใช้หน้าต่างใหม่แทน alert
+            showAdminAlert('ลบสำเร็จ', 'ลบผู้ใช้งานออกจากระบบเรียบร้อยแล้ว', 'success');
+        }
+    });
+}
+
+// --- 2. ฟังก์ชันเตรียมแบน (Ask Ban/Unban) - อัปเดตใหม่ ---
+window.askBanUser = (docId) => {
+    closeActionMenu();
+    const user = allUsers.find(u => u.docId === docId);
+    if (!user) return;
+
+    const isBlocked = (user.account_status === 'blocked');
+    
+    if (isBlocked) {
+        // ปลดแบน
+        setupActionModal({
+            title: '✅ ยืนยันการปลดแบน',
+            desc: `ต้องการเปิดใช้งานบัญชี "${user.username}" ให้กลับมาใช้งานได้ปกติหรือไม่?`,
+            icon: 'fa-unlock',
+            colorClass: 'bg-green-600 hover:bg-green-700',
+            iconBgClass: 'bg-green-100',
+            iconColorClass: 'text-green-600',
+            callback: async () => {
+                await db.collection("users").doc(docId).update({ account_status: 'normal' });
+                // ✅ ใช้หน้าต่างใหม่แทน alert
+                showAdminAlert('ปลดล็อกสำเร็จ', 'เปิดการใช้งานบัญชีเรียบร้อยแล้ว', 'success');
+            }
+        });
+    } else {
+        // สั่งแบน
+        setupActionModal({
+            title: '⛔ ยืนยันการระงับบัญชี',
+            desc: `ต้องการระงับการใช้งานของ "${user.username}" หรือไม่? <br><span class="text-xs text-gray-500">*ผู้ใช้จะเด้งออกจากระบบทันที</span>`,
+            icon: 'fa-ban',
+            colorClass: 'bg-orange-600 hover:bg-orange-700',
+            iconBgClass: 'bg-orange-100',
+            iconColorClass: 'text-orange-600',
+            callback: async () => {
+                await db.collection("users").doc(docId).update({ account_status: 'blocked' });
+                // ✅ ใช้หน้าต่างใหม่แทน alert
+                showAdminAlert('ระงับสำเร็จ', 'ระงับบัญชีผู้ใช้เรียบร้อยแล้ว', 'success');
+            }
+        });
+    }
+}
+// --- ฟังก์ชัน ระงับ/ปลดระงับ การสั่งซื้อ ---
+window.askToggleOrderSuspension = (docId) => {
+    closeActionMenu();
+    const user = allUsers.find(u => u.docId === docId);
+    if (!user) return;
+
+    const isSuspended = (user.order_status === 'suspended');
+
+    if (isSuspended) {
+        // กรณีปลดล็อค (Unsuspend)
+        setupActionModal({
+            title: '✅ ยืนยันเปิดการสั่งซื้อ',
+            desc: `อนุญาตให้ "${user.username}" กลับมาทำภารกิจ/สั่งซื้อสินค้าได้ตามปกติหรือไม่?`,
+            icon: 'fa-play',
+            colorClass: 'bg-green-600 hover:bg-green-700',
+            iconBgClass: 'bg-green-100',
+            iconColorClass: 'text-green-600',
+            callback: async () => {
+                await db.collection("users").doc(docId).update({ order_status: 'normal' });
+                showAdminAlert('สำเร็จ', 'เปิดสิทธิ์การสั่งซื้อเรียบร้อยแล้ว', 'success');
+            }
+        });
+    } else {
+        // กรณีระงับ (Suspend)
+        setupActionModal({
+            title: '⛔ ยืนยันระงับการสั่งซื้อ',
+            desc: `ต้องการระงับไม่ให้ "${user.username}" กดสั่งซื้อ/ทำภารกิจหรือไม่? <br><span class="text-xs text-gray-500">(ผู้ใช้ยังล็อกอินได้ แต่จะกดงานไม่ได้)</span>`,
+            icon: 'fa-pause',
+            colorClass: 'bg-orange-500 hover:bg-orange-600',
+            iconBgClass: 'bg-orange-100',
+            iconColorClass: 'text-orange-500',
+            callback: async () => {
+                await db.collection("users").doc(docId).update({ order_status: 'suspended' });
+                showAdminAlert('สำเร็จ', 'ระงับการสั่งซื้อผู้ใช้รายนี้แล้ว', 'success');
+            }
+        });
+    }
+}
+// --- อัปเดตฟังก์ชัน Trigger Error ให้ใช้หน้าต่างสวยๆ ด้วย ---
+window.executePendingAction = async () => {
+    if (pendingActionCallback) {
+        const btn = document.getElementById('action-btn-confirm');
+        const oldText = btn.innerText;
+        btn.innerText = 'กำลังประมวลผล...';
+        btn.disabled = true;
+
+        try {
+            await pendingActionCallback();
+            closeModal('modal-action-confirm'); // ปิดหน้าต่างยืนยันก่อน
+        } catch (e) {
+            // ✅ เปลี่ยน Error Alert เป็นหน้าต่างสวยๆ สีแดง
+            showAdminAlert('เกิดข้อผิดพลาด', e.message, 'error');
+        } finally {
+            btn.innerText = oldText;
+            btn.disabled = false;
+            pendingActionCallback = null;
+        }
+    }
+}
+
+// --- Helper: ตั้งค่า Modal ตามสถานการณ์ ---
+function setupActionModal({ title, desc, icon, colorClass, iconBgClass, iconColorClass, callback }) {
+    document.getElementById('action-title').innerText = title;
+    document.getElementById('action-desc').innerHTML = desc;
+    
+    // ตั้งไอคอน
+    const iconEl = document.getElementById('action-icon');
+    iconEl.className = `fa-solid ${icon} text-2xl ${iconColorClass}`;
+    document.getElementById('action-icon-bg').className = `mx-auto flex items-center justify-center h-16 w-16 rounded-full mb-4 transition-colors ${iconBgClass}`;
+
+    // ตั้งสีปุ่ม
+    const btn = document.getElementById('action-btn-confirm');
+    btn.className = `w-full inline-flex justify-center rounded-lg border border-transparent shadow-sm px-4 py-2.5 text-base font-medium text-white focus:outline-none transition ${colorClass}`;
+
+    pendingActionCallback = callback; // จำฟังก์ชันไว้เรียกตอนกดปุ่ม
+
+    const modal = document.getElementById('modal-action-confirm');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+// --- Trigger: เมื่อกดปุ่มยืนยันใน Modal ---
+window.executePendingAction = async () => {
+    if (pendingActionCallback) {
+        // เปลี่ยนปุ่มเป็น Loading
+        const btn = document.getElementById('action-btn-confirm');
+        const oldText = btn.innerText;
+        btn.innerText = 'กำลังประมวลผล...';
+        btn.disabled = true;
+
+        try {
+            await pendingActionCallback();
+            closeModal('modal-action-confirm');
+        } catch (e) {
+            alert("เกิดข้อผิดพลาด: " + e.message);
+        } finally {
+            btn.innerText = oldText;
+            btn.disabled = false;
+            pendingActionCallback = null;
+        }
+    }
+}
+// --- Modal แจ้งเตือนผลลัพธ์ (Success/Error Alert) ---
+const modalAdminAlertHtml = `
+<div id="modal-admin-alert" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-[160] backdrop-blur-sm font-sans" style="z-index: 160;">
+    <div class="bg-white rounded-2xl shadow-2xl w-full max-w-sm p-6 text-center transform transition-all scale-100 modal-scale-in">
+        
+        <div id="alert-icon-bg" class="mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-4 transition-colors">
+            <i id="alert-icon" class="fa-solid fa-check text-2xl text-green-600"></i>
+        </div>
+
+        <h3 id="alert-title" class="text-lg leading-6 font-bold text-gray-900 mb-2">สำเร็จ</h3>
+        <p id="alert-msg" class="text-sm text-gray-500 mb-6">ดำเนินการเรียบร้อยแล้ว</p>
+
+        <button onclick="closeModal('modal-admin-alert')" class="w-full inline-flex justify-center rounded-lg border border-transparent shadow-md px-4 py-2.5 bg-gray-800 text-base font-medium text-white hover:bg-gray-900 focus:outline-none transition">
+            ตกลง (OK)
+        </button>
+    </div>
+</div>`;
+
+document.body.insertAdjacentHTML('beforeend', modalAdminAlertHtml);
+
+// --- ฟังก์ชันเรียกหน้าต่างแจ้งเตือนสวยๆ ---
+window.showAdminAlert = (title, msg, type = 'success') => {
+    const modal = document.getElementById('modal-admin-alert');
+    const iconEl = document.getElementById('alert-icon');
+    const bgEl = document.getElementById('alert-icon-bg');
+    
+    // ตั้งค่าข้อความ
+    document.getElementById('alert-title').innerText = title;
+    document.getElementById('alert-msg').innerHTML = msg;
+
+    // ตั้งค่าสีและไอคอนตามประเภท (success / error)
+    if (type === 'success') {
+        iconEl.className = 'fa-solid fa-check text-2xl text-green-600';
+        bgEl.className = 'mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-green-100 mb-4';
+    } else if (type === 'error') {
+        iconEl.className = 'fa-solid fa-xmark text-2xl text-red-600';
+        bgEl.className = 'mx-auto flex items-center justify-center h-16 w-16 rounded-full bg-red-100 mb-4';
+    }
+
+    // แสดงผล
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+// --- Modal บันทึกช่วยจำ (Admin Memo) ---
+const modalMemoHtml = `
+<div id="modal-memo" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-[130] backdrop-blur-sm font-sans">
+    <div class="bg-white rounded-lg shadow-2xl w-full max-w-sm modal-scale-in overflow-hidden">
+        <div class="flex justify-between items-center p-4 border-b bg-purple-50">
+            <h3 class="font-bold text-purple-800"><i class="fa-solid fa-note-sticky mr-2"></i> บันทึกช่วยจำ (Admin Note)</h3>
+            <button onclick="closeModal('modal-memo')" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="p-5 space-y-4">
+            <div>
+                <label class="block text-xs font-bold text-gray-600 mb-2">ข้อความบันทึก (เห็นเฉพาะแอดมิน)</label>
+                <textarea id="admin-memo-input" rows="4" class="w-full border border-gray-300 rounded-lg p-3 text-sm focus:border-purple-500 focus:outline-none resize-none" placeholder="เช่น: ยังไม่ชำระค่าธรรมเนียม, ลูกค้า VIP, ต้องตรวจสอบซ้ำ"></textarea>
+            </div>
+            <p class="text-[10px] text-gray-400">* ข้อความนี้จะแสดงในตารางรายชื่อสมาชิกทันที</p>
+        </div>
+        <div class="bg-gray-50 p-4 flex justify-center gap-3 border-t">
+            <button onclick="saveAdminMemo()" class="bg-purple-600 hover:bg-purple-700 text-white px-6 py-2 rounded text-sm font-bold shadow hover:shadow-md transition">บันทึก</button>
+            <button onclick="closeModal('modal-memo')" class="bg-gray-300 hover:bg-gray-400 text-gray-700 px-6 py-2 rounded text-sm font-bold shadow hover:shadow-md transition">ยกเลิก</button>
+        </div>
+    </div>
+</div>`;
+
+document.body.insertAdjacentHTML('beforeend', modalMemoHtml);
+
+// 1. ฟังก์ชันเปิดหน้าต่าง Memo
+window.openMemoModal = (docId) => {
+    closeActionMenu();
+    currentActionUserId = docId;
+    
+    const user = allUsers.find(u => u.docId === docId);
+    if (!user) return;
+
+    // ดึงข้อความเดิมมาใส่ (ถ้ามี)
+    document.getElementById('admin-memo-input').value = user.admin_memo || '';
+
+    const modal = document.getElementById('modal-memo');
+    modal.classList.remove('hidden');
+    modal.classList.add('flex');
+}
+
+// 2. ฟังก์ชันบันทึก Memo
+window.saveAdminMemo = async () => {
+    if (!currentActionUserId) return;
+
+    const memoText = document.getElementById('admin-memo-input').value.trim();
+
+    try {
+        // อัปเดตลง Database
+        await db.collection("users").doc(currentActionUserId).update({
+            admin_memo: memoText
+        });
+
+        closeModal('modal-memo');
+        
+        // ใช้แจ้งเตือนแบบสวย (ถ้ามี) หรือ alert ธรรมดา
+        if(typeof showAdminAlert === 'function') {
+            showAdminAlert('บันทึกสำเร็จ', 'อัปเดตบันทึกช่วยจำเรียบร้อยแล้ว', 'success');
+        } else {
+            alert('✅ บันทึกเรียบร้อย');
+        }
+
+    } catch (e) {
+        alert("Error: " + e.message);
+    }
+}
+// ✅ ฟังก์ชัน: ปลดล็อคโดย "นำยอดเงินรวม มาลบ ยอดแช่แข็ง" (หักหนี้)
+       // ✅ ฟังก์ชัน: ปลดล็อค + คืนเงินต้น + บวกกำไร + บันทึกยอดคอมมิชชั่น (เวอร์ชันล่าสุด)
+        // (แก้ไขให้ admin_members.html ทำงานเหมือนหน้าเติมเงิน)
+      // ✅ ฟังก์ชัน: ปลดล็อค + คืนเงินต้น + บวกกำไร + รีเซ็ตงานเป็น 0
+       // ✅ ฟังก์ชัน: ปลดล็อคอัตโนมัติ (แก้ไขเงื่อนไขให้เข้มงวดขึ้น)
+        async function checkAndUnlockFrozenOrders(userId) {
+            try {
+                const userRef = db.collection("users").doc(userId);
+                const userSnap = await userRef.get();
+                if (!userSnap.exists) return;
+                
+                const userData = userSnap.data();
+                const currentBalance = parseFloat(userData.balance || 0); 
+
+                const ordersSnap = await db.collection("orders")
+                    .where("username", "==", userData.username)
+                    .where("status", "==", "frozen")
+                    .get();
+
+                if (ordersSnap.empty) return;
+
+                let totalFrozenNeeded = 0;
+                ordersSnap.forEach(doc => { totalFrozenNeeded += parseFloat(doc.data().amount || 0); });
+
+                // --- 🔴 ส่วนที่แก้ไข (Logic ใหม่) 🔴 ---
+                
+                // คำนวณยอดเงินที่ใช้ได้จริง (ไม่รวมยอดที่แช่แข็งอยู่)
+                const availableBalance = currentBalance - totalFrozenNeeded;
+
+                console.log(`Balance: ${currentBalance}, Frozen: ${totalFrozenNeeded}, Available: ${availableBalance}`);
+
+                // เงื่อนไขใหม่: "ยอดเงินที่เหลือใช้ได้" ต้องมากกว่าหรือเท่ากับ "ยอดที่ติด Frozen"
+                // แปลว่าลูกค้าต้องเติมเงินเข้ามาใหม่ เต็มจำนวนของออเดอร์นั้นๆ
+                if (Number(availableBalance.toFixed(2)) >= Number(totalFrozenNeeded.toFixed(2))) {
+                    
+                    let batch = db.batch();
+                    let profitToAdd = 0; 
+
+                    ordersSnap.forEach(doc => {
+                        const orderData = doc.data();
+                        const commission = parseFloat(orderData.commission || 0); 
+                        profitToAdd += commission;
+
+                        // เปลี่ยนสถานะออเดอร์
+                        batch.update(doc.ref, {
+                            status: 'completed',       
+                            payment_status: 'paid',    
+                            pay_time: new Date().toISOString(),
+                            timestamp: new Date().toISOString()
+                        });
+                    });
+
+                    const finalProfit = Number(profitToAdd.toFixed(2));
+
+                    // อัปเดตข้อมูล User
+                    batch.update(userRef, {
+                        balance: firebase.firestore.FieldValue.increment(finalProfit), 
+                        commission: firebase.firestore.FieldValue.increment(finalProfit),
+                        "trap_config.is_triggered": true, 
+                        todayCount: 0 // รีเซ็ตงานเป็น 0
+                    });
+
+                    await batch.commit();
+
+                    const netBalance = Number((currentBalance + finalProfit).toFixed(2));
+                    
+                    alert(`🔓 ปลดล็อคเรียบร้อย! (ตามยอดเติมใหม่)\n\n- ยอดสุทธิ: ${netBalance.toLocaleString()}\n- รีเซ็ตงานเป็น 0`);
+                    
+                    if(typeof renderTable === 'function') renderTable();
+                    if(typeof renderHistoryTable === 'function') renderHistoryTable(userId);
+                } else {
+                    console.log("ยอดเงินยังไม่พอสำหรับปลดล็อค (ต้องเติมเพิ่ม)");
+                }
+            } catch (e) {
+                console.error("Auto Unlock Error:", e);
+            }
+        }
+    </script>
+    
+</body>
+</html>

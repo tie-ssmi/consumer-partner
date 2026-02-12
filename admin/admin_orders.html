@@ -1,0 +1,441 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <script>
+    // Security Check
+    if (localStorage.getItem('admin_logged_in') !== 'true') {
+        window.location.href = '../admin_login/index.html';
+    }
+    </script>
+    <meta charset="UTF-8">
+    <title>Admin - รายการสั่งซื้อ</title>
+    <link rel="stylesheet" href="js/admin_style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+    
+    <style> 
+        /* Custom Scrollbar */
+        .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+        .custom-scroll::-webkit-scrollbar-track { background: #f1f1f1; }
+        .custom-scroll::-webkit-scrollbar-thumb { background: #c1c1c1; border-radius: 4px; }
+        .custom-scroll::-webkit-scrollbar-thumb:hover { background: #a8a8a8; }
+
+        th, td { 
+            padding: 12px 10px; 
+            font-size: 12px; 
+            vertical-align: middle; 
+            white-space: nowrap; 
+            border-bottom: 1px solid #f3f4f6;
+        }
+        
+        /* Sticky Header */
+        thead th { 
+            position: sticky; 
+            top: 0; 
+            z-index: 10; 
+            box-shadow: 0 1px 2px rgba(0,0,0,0.05); 
+            background-color: #f9fafb;
+            font-weight: 600; 
+            color: #4b5563;
+        }
+
+        tr:hover { background-color: #f8fafc; }
+        
+        .badge { padding: 4px 10px; border-radius: 999px; font-size: 10px; font-weight: 600; }
+        .badge-pending { background: #fff7ed; color: #ea580c; border: 1px solid #ffedd5; }
+        .badge-paid { background: #f0fdf4; color: #16a34a; border: 1px solid #dcfce7; }
+        .badge-frozen { background: #fef2f2; color: #dc2626; border: 1px solid #fee2e2; }
+        
+        .btn-action { padding: 4px 8px; border-radius: 6px; color: white; font-size: 11px; margin-right: 4px; cursor: pointer; transition: 0.2s; display: inline-flex; align-items: center; gap: 4px; }
+        .btn-action:hover { opacity: 0.9; transform: scale(1.05); }
+        .btn-green { background-color: #10b981; } 
+        .btn-red { background-color: #ef4444; } 
+        .btn-blue { background-color: #3b82f6; }
+        .btn-yellow { background-color: #f59e0b; }
+        
+        .modal-fade-in { animation: fadeIn 0.2s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: scale(0.95); } to { opacity: 1; transform: scale(1); } }
+
+        .sys-menu-header { color: #4b646f; background: #1a2226; padding: 10px 25px 10px 15px; font-size: 12px; text-transform: uppercase; font-weight: bold; }
+        .sys-menu-item { display: block; padding: 12px 15px; color: #b8c7ce; border-bottom: 1px solid #222d32; transition: all 0.3s; font-size: 13px; cursor: pointer; text-decoration: none; }
+        .sys-menu-item:hover { background-color: #1e282c; color: #fff; }
+        .sys-menu-item.active { background-color: #1e282c; color: #fff; border-left: 3px solid #00a65a; }
+        .sys-menu-item i { width: 20px; margin-right: 10px; text-align: center; }
+    </style>
+</head>
+<body class="bg-gray-100 font-sans h-screen overflow-hidden flex flex-col">
+    <script src="js/admin_ui.js"></script>
+    <script src="js/firebase_setup.js"></script> 
+
+    <script>
+        renderAdminUI('trading', 'orders'); 
+
+        setTimeout(() => {
+            const sidebarContainer = document.querySelector('aside') || document.getElementById('sidebar-menu'); 
+            if (sidebarContainer) {
+                sidebarContainer.innerHTML = `
+                    <div class="h-full bg-[#222d32] overflow-y-auto custom-scroll pt-2">
+                        <div class="sys-menu-header">การจัดการธุรกรรม</div>
+                        <a href="admin_orders.html" class="sys-menu-item active"><i class="fa-solid fa-cart-shopping"></i> รายการสั่งซื้อ</a>
+                        <a href="admin_recharge.html" class="sys-menu-item"><i class="fa-solid fa-money-bill-transfer"></i> การจัดการการเติมเงิน</a>
+                        <a href="admin_withdrawal.html" class="sys-menu-item"><i class="fa-solid fa-hand-holding-dollar"></i> การจัดการการถอนเงิน</a>
+                        <a href="#" class="sys-menu-item"><i class="fa-solid fa-gauge-high"></i> การควบคุมธุรกรรม</a>
+                        <div class="sys-menu-header">การจัดการผลิตภัณฑ์</div>
+                        <a href="admin_product_list.html" class="sys-menu-item"><i class="fa-solid fa-box-open"></i> รายการสินค้า</a>
+                        <a href="admin_product_category.html" class="sys-menu-item"><i class="fa-solid fa-tags"></i> หมวดหมู่สินค้า</a>
+                    </div>
+                `;
+            }
+        }, 100);
+
+        // ✅✅✅ ปรับโครงสร้าง Flexbox ให้ตารางยืดเต็มจอ ✅✅✅
+        document.getElementById('main-content').innerHTML = `
+            <div class="flex flex-col h-full max-h-screen pb-4">
+                
+                <div class="bg-white px-5 py-3 shadow-sm border-b flex justify-between items-center shrink-0 h-16">
+                    <h2 class="text-xl font-bold text-gray-800">🛒 รายการสั่งซื้อ (Order List)</h2>
+                    <button onclick="window.location.reload()" class="bg-indigo-50 text-indigo-600 px-4 py-2 rounded-lg text-xs font-bold hover:bg-indigo-100 transition">
+                        <i class="fa-solid fa-rotate mr-1"></i> รีเฟรช
+                    </button>
+                </div>
+                
+                <div class="bg-white p-3 rounded-lg shadow-sm border border-gray-200 m-4 mb-2 flex flex-wrap gap-4 items-center shrink-0">
+                    <select id="filter-status" onchange="resetAndRender()" class="border border-gray-300 px-3 py-2 text-xs rounded-lg outline-none focus:border-indigo-500 bg-gray-50 hover:bg-white transition cursor-pointer font-bold text-gray-600">
+                        <option value="all">สถานะ: ทั้งหมด</option>
+                        <option value="pending">รออนุมัติ</option>
+                        <option value="frozen">ถูกแช่แข็ง</option>
+                        <option value="completed">เสร็จสิ้น</option>
+                    </select>
+                    <div class="relative flex-1 max-w-md">
+                        <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-gray-400 text-xs"></i>
+                        <input type="text" id="search-input" onkeyup="resetAndRender()" placeholder="ค้นหา Order ID หรือ ชื่อผู้ใช้..." class="border border-gray-300 pl-9 pr-3 py-2 text-xs rounded-lg w-full outline-none focus:border-indigo-500 bg-gray-50 focus:bg-white transition">
+                    </div>
+                </div>
+
+                <div class="flex-1 overflow-hidden mx-4 bg-white rounded-lg shadow-sm border border-gray-200 relative">
+                    <div class="absolute inset-0 overflow-auto custom-scroll">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr>
+                                    <th class="pl-6 w-32">Order ID</th>
+                                    <th class="w-32">ผู้ใช้งาน</th>
+                                    <th class="min-w-[200px]">สินค้า</th>
+                                    <th class="text-right w-24">ราคา/ชิ้น</th>
+                                    <th class="text-center w-20">จำนวน</th>
+                                    <th class="text-right w-28">ราคารวม (Frozen)</th>
+                                    <th class="text-right w-24">คอมมิชชั่น</th>
+                                    <th class="w-32 text-center">เวลาสั่งซื้อ</th>
+                                    <th class="text-center w-24">สถานะ</th>
+                                    <th class="text-center pr-6 w-40">จัดการ</th>
+                                </tr>
+                            </thead>
+                            <tbody id="order-body">
+                                <tr><td colspan="10" class="text-center p-8 text-gray-400">กำลังโหลดข้อมูล...</td></tr>
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="flex justify-between items-center px-4 py-2 mt-2 mx-4 bg-white rounded-lg shadow-sm border border-gray-200 shrink-0 h-12">
+                    <span class="text-xs text-gray-500 font-bold" id="pageInfo">...</span>
+                    <div class="flex gap-2">
+                        <button onclick="changePage(-1)" id="btnPrev" class="px-3 py-1.5 bg-white border border-gray-300 rounded text-xs hover:bg-gray-50 disabled:opacity-50 transition font-bold text-gray-600 flex items-center shadow-sm">
+                            <i class="fa-solid fa-chevron-left mr-1"></i> ก่อนหน้า
+                        </button>
+                        <button onclick="changePage(1)" id="btnNext" class="px-3 py-1.5 bg-white border border-gray-300 rounded text-xs hover:bg-gray-50 disabled:opacity-50 transition font-bold text-gray-600 flex items-center shadow-sm">
+                            ถัดไป <i class="fa-solid fa-chevron-right ml-1"></i>
+                        </button>
+                    </div>
+                </div>
+
+            </div> <div id="editModal" class="fixed inset-0 bg-black/50 hidden items-center justify-center z-[60] backdrop-blur-sm">
+                <div class="bg-white w-full max-w-lg rounded-xl shadow-2xl modal-fade-in overflow-hidden">
+                    <div class="bg-gray-800 text-white px-6 py-4 flex justify-between items-center">
+                        <h3 class="font-bold text-lg"><i class="fa-solid fa-pen-to-square mr-2"></i>แก้ไขข้อมูลออเดอร์</h3>
+                        <button onclick="closeEditModal()" class="text-gray-400 hover:text-white"><i class="fa-solid fa-xmark text-xl"></i></button>
+                    </div>
+                    <div class="p-6 space-y-4">
+                        <input type="hidden" id="edit-doc-id">
+                        
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 mb-1">ชื่อสินค้า</label>
+                            <input type="text" id="edit-product-name" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 outline-none">
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-700 mb-1">ราคาต่อชิ้น</label>
+                                <input type="number" id="edit-unit-price" oninput="calculateTotal()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-700 mb-1">จำนวนสินค้า</label>
+                                <input type="number" id="edit-qty" oninput="calculateTotal()" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 outline-none">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-2 gap-4">
+                            <div>
+                                <label class="block text-xs font-bold text-gray-700 mb-1">ราคารวม (Amount)</label>
+                                <input type="number" id="edit-amount" class="w-full bg-gray-100 border border-gray-300 rounded-lg px-3 py-2 text-sm text-gray-500 font-bold outline-none" readonly>
+                                <p class="text-[10px] text-red-500 mt-1">*ยอดนี้จะใช้สำหรับแช่แข็ง</p>
+                            </div>
+                            <div>
+                                <label class="block text-xs font-bold text-gray-700 mb-1">คอมมิชชั่น</label>
+                                <input type="number" id="edit-commission" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 outline-none">
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-xs font-bold text-gray-700 mb-1">สถานะ</label>
+                            <select id="edit-status" class="w-full border border-gray-300 rounded-lg px-3 py-2 text-sm focus:border-indigo-500 outline-none bg-white">
+                                <option value="pending">รออนุมัติ (Pending)</option>
+                                <option value="completed">เสร็จสิ้น (Completed)</option>
+                                <option value="frozen">ถูกแช่แข็ง (Frozen)</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="bg-gray-50 px-6 py-4 flex justify-end gap-2 border-t border-gray-100">
+                        <button onclick="closeEditModal()" class="px-4 py-2 bg-white border border-gray-300 rounded-lg text-xs font-bold hover:bg-gray-100">ยกเลิก</button>
+                        <button onclick="saveOrderChanges()" class="px-4 py-2 bg-indigo-600 text-white rounded-lg text-xs font-bold hover:bg-indigo-700 shadow-md">บันทึกการแก้ไข</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // --- ตัวแปรสำหรับ Pagination ---
+        let allOrders = [];
+        let filteredOrders = [];
+        let currentPage = 1;
+        const itemsPerPage = 15; // ✅ แสดงหน้าละ 15 รายการ
+
+        function getSmartDate(dateInput) {
+            if (!dateInput) return 0;
+            const isoTime = new Date(dateInput).getTime();
+            if (!isNaN(isoTime)) return isoTime;
+            return parseThaiDate(dateInput) || 0;
+        }
+
+        function parseThaiDate(dateStr) {
+            let s = dateStr.toString().replace(/เวลา/g, '').replace(/,/g, '').replace(/น\./g, '').trim().replace(/\s+/g, ' ');
+            const thMonths = ["มกราคม", "กุมภาพันธ์", "มีนาคม", "เมษายน", "พฤษภาคม", "มิถุนายน", "กรกฎาคม", "สิงหาคม", "กันยายน", "ตุลาคม", "พฤศจิกายน", "ธันวาคม"];
+            let isThaiText = false;
+            thMonths.forEach((m, i) => { if (s.includes(m)) { s = s.replace(m, (i + 1) + '/'); isThaiText = true; } });
+            const parts = s.split(/[\s/\-:]+/);
+            if (parts.length < 3) return null;
+            let d, m, y, h=0, min=0, sec=0;
+            if (isThaiText) { d=parseInt(parts[0]); m=parseInt(parts[1]); y=parseInt(parts[2]); h=parseInt(parts[3]||0); min=parseInt(parts[4]||0); sec=parseInt(parts[5]||0); }
+            else { let p1=parseInt(parts[0]), p2=parseInt(parts[1]), p3=parseInt(parts[2]); if(p1>1000){ y=p1; m=p2; d=p3; } else { d=p1; m=p2; y=p3; } h=parseInt(parts[3]||0); min=parseInt(parts[4]||0); sec=parseInt(parts[5]||0); }
+            if (y > 2400) y -= 543;
+            return new Date(y, m - 1, d, h, min, sec).getTime();
+        }
+
+        function formatDateDisplay(dateInput) {
+            const ms = getSmartDate(dateInput);
+            if (!ms) return "-";
+            const d = new Date(ms);
+            return `${String(d.getDate()).padStart(2,'0')}/${String(d.getMonth()+1).padStart(2,'0')}/${d.getFullYear()} ${String(d.getHours()).padStart(2,'0')}:${String(d.getMinutes()).padStart(2,'0')}`;
+        }
+
+        function setupRealtimeListener() {
+            if (!window.db) return setTimeout(setupRealtimeListener, 1000);
+            db.collection("orders").onSnapshot((snapshot) => {
+                allOrders = [];
+                snapshot.forEach(doc => allOrders.push({ docId: doc.id, ...doc.data() }));
+                
+                // เรียงลำดับตามเวลา (ใหม่สุดขึ้นก่อน)
+                allOrders.sort((a, b) => {
+                    const timeA = getSmartDate(a.timestamp || a.order_time);
+                    const timeB = getSmartDate(b.timestamp || b.order_time);
+                    return timeB - timeA;
+                });
+
+                renderTable();
+            });
+        }
+
+        // ฟังก์ชันรีเซ็ตหน้าเมื่อค้นหา/กรอง
+        function resetAndRender() {
+            currentPage = 1;
+            renderTable();
+        }
+
+        function renderTable() {
+            const tbody = document.getElementById('order-body');
+            const statusFilter = document.getElementById('filter-status').value;
+            const searchText = document.getElementById('search-input').value.toLowerCase();
+            
+            // 1. กรองข้อมูล
+            filteredOrders = allOrders.filter(o => {
+                const matchStatus = (statusFilter === 'all') || (o.status === statusFilter);
+                const matchSearch = (!searchText) || 
+                                    (o.order_id && o.order_id.toLowerCase().includes(searchText)) || 
+                                    (o.username && o.username.toLowerCase().includes(searchText));
+                return matchStatus && matchSearch;
+            });
+
+            // 2. คำนวณ Pagination
+            const totalItems = filteredOrders.length;
+            if (totalItems === 0) {
+                tbody.innerHTML = '<tr><td colspan="10" class="text-center p-12 text-gray-400 font-bold">ไม่พบข้อมูล</td></tr>';
+                updatePaginationControls(0);
+                return;
+            }
+
+            const startIndex = (currentPage - 1) * itemsPerPage;
+            const endIndex = startIndex + itemsPerPage;
+            const pageData = filteredOrders.slice(startIndex, endIndex);
+
+            // 3. แสดงผล
+            let html = '';
+            pageData.forEach(o => {
+                let statusBadge, actionButtons;
+                if (o.status === 'pending') { statusBadge = '<span class="badge badge-pending">รออนุมัติ</span>'; }
+                else if (o.status === 'frozen') { statusBadge = '<span class="badge badge-frozen">ถูกแช่แข็ง</span>'; }
+                else { statusBadge = '<span class="badge badge-paid">สำเร็จ</span>'; }
+
+                let btnEdit = `<button onclick="openEditModal('${o.docId}')" class="btn-action btn-yellow" title="แก้ไข"><i class="fa-solid fa-pen"></i> แก้ไข</button>`;
+                
+                if (o.status === 'pending') { 
+                    actionButtons = `${btnEdit}<button onclick="updateOrderStatus('${o.docId}', 'completed')" class="btn-action btn-green">อนุมัติ</button><button onclick="updateOrderStatus('${o.docId}', 'frozen')" class="btn-action btn-red">แช่แข็ง</button>`; 
+                } else if (o.status === 'frozen') { 
+                    actionButtons = `${btnEdit}<button onclick="updateOrderStatus('${o.docId}', 'pending')" class="btn-action btn-blue">ปลดล็อค</button>`; 
+                } else { 
+                    actionButtons = `${btnEdit}`;
+                }
+
+                const showTime = formatDateDisplay(o.timestamp || o.order_time);
+                
+                const qty = o.quantity || 1;
+                const unitPrice = o.unit_price || (o.amount / qty);
+                const totalAmount = o.amount;
+
+                html += `
+                <tr class="hover:bg-gray-50 border-b last:border-b-0 transition group">
+                    <td class="pl-6 font-mono text-xs font-bold text-gray-600">${o.order_id}</td>
+                    <td class="font-bold text-indigo-600 text-xs">${o.username}</td>
+                    <td class="text-xs truncate max-w-[200px] text-gray-700" title="${o.product_name}">${o.product_name||'สินค้า'}</td>
+                    
+                    <td class="text-right text-gray-500 text-xs">฿${Number(unitPrice).toLocaleString()}</td>
+                    
+                    <td class="text-center font-bold text-blue-600 bg-blue-50/50 text-xs">${Number(qty).toLocaleString()}</td>
+                    
+                    <td class="text-right font-bold text-gray-800">฿${Number(totalAmount).toLocaleString()}</td>
+                    
+                    <td class="text-right text-green-600 font-bold">+฿${Number(o.commission).toLocaleString()}</td>
+                    <td class="text-xs text-gray-500 text-center">${showTime}</td>
+                    <td class="text-center">${statusBadge}</td>
+                    <td class="text-center flex justify-center py-2 items-center">${actionButtons}</td>
+                </tr>`;
+            });
+            tbody.innerHTML = html;
+            
+            updatePaginationControls(totalItems);
+        }
+
+        // ฟังก์ชันอัปเดตปุ่มเปลี่ยนหน้า
+        function updatePaginationControls(totalItems) {
+            const totalPages = Math.ceil(totalItems / itemsPerPage);
+            const startItem = totalItems === 0 ? 0 : ((currentPage - 1) * itemsPerPage) + 1;
+            const endItem = Math.min(currentPage * itemsPerPage, totalItems);
+
+            document.getElementById('pageInfo').innerText = `แสดง ${startItem}-${endItem} จาก ${totalItems} รายการ (หน้า ${currentPage}/${totalPages || 1})`;
+            
+            document.getElementById('btnPrev').disabled = currentPage === 1;
+            document.getElementById('btnNext').disabled = currentPage === totalPages || totalPages === 0;
+        }
+
+        // ฟังก์ชันเปลี่ยนหน้า
+        window.changePage = (direction) => {
+            const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
+            const newPage = currentPage + direction;
+
+            if (newPage > 0 && newPage <= totalPages) {
+                currentPage = newPage;
+                renderTable();
+            }
+        }
+
+        // ✅ ฟังก์ชันคำนวณราคาอัตโนมัติใน Modal
+        window.calculateTotal = () => {
+            const price = parseFloat(document.getElementById('edit-unit-price').value) || 0;
+            const qty = parseFloat(document.getElementById('edit-qty').value) || 0;
+            const total = price * qty;
+            document.getElementById('edit-amount').value = total;
+        }
+
+        function openEditModal(docId) {
+            const order = allOrders.find(o => o.docId === docId);
+            if(!order) return;
+
+            const qty = order.quantity || 1;
+            const unitPrice = order.unit_price || (order.amount / qty);
+
+            document.getElementById('edit-doc-id').value = docId;
+            document.getElementById('edit-product-name').value = order.product_name || '';
+            
+            document.getElementById('edit-unit-price').value = unitPrice;
+            document.getElementById('edit-qty').value = qty;
+            document.getElementById('edit-amount').value = order.amount || 0;
+
+            document.getElementById('edit-commission').value = order.commission || 0;
+            document.getElementById('edit-status').value = order.status || 'pending';
+            document.getElementById('editModal').classList.remove('hidden');
+            document.getElementById('editModal').classList.add('flex');
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').classList.add('hidden');
+            document.getElementById('editModal').classList.remove('flex');
+        }
+
+        async function saveOrderChanges() {
+            const docId = document.getElementById('edit-doc-id').value;
+            
+            const unitPrice = parseFloat(document.getElementById('edit-unit-price').value);
+            const qty = parseFloat(document.getElementById('edit-qty').value);
+            const amount = parseFloat(document.getElementById('edit-amount').value);
+
+            const updateData = {
+                product_name: document.getElementById('edit-product-name').value,
+                unit_price: unitPrice,
+                quantity: qty,
+                amount: amount, 
+                commission: parseFloat(document.getElementById('edit-commission').value),
+                status: document.getElementById('edit-status').value
+            };
+
+            if(confirm("ยืนยันการบันทึกการแก้ไข?")) {
+                try {
+                    if (updateData.status === 'completed') {
+                        updateData.payment_status = 'paid';
+                        updateData.pay_time = new Date().toISOString();
+                        updateData.timestamp = new Date().toISOString();
+                    }
+                    await db.collection("orders").doc(docId).update(updateData);
+                    alert("บันทึกข้อมูลเรียบร้อยแล้ว!");
+                    closeEditModal();
+                } catch(e) { alert("เกิดข้อผิดพลาด: " + e.message); }
+            }
+        }
+
+        window.updateOrderStatus = async (docId, newStatus) => {
+            if(confirm("ยืนยันการเปลี่ยนสถานะ?")) {
+                try {
+                    let updateData = { status: newStatus };
+                    if (newStatus === 'completed') { 
+                        updateData.payment_status = 'paid'; 
+                        updateData.pay_time = new Date().toISOString();
+                        updateData.timestamp = new Date().toISOString(); 
+                    }
+                    if (newStatus === 'pending') { updateData.frozen_amount = 0; }
+                    await db.collection("orders").doc(docId).update(updateData);
+                } catch(e) { alert("Error: " + e.message); }
+            }
+        }
+        
+        setupRealtimeListener();
+    </script>
+</body>
+</html>

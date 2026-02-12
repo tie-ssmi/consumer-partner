@@ -1,0 +1,393 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <script>
+    // Security Check
+    if (localStorage.getItem('admin_logged_in') !== 'true') {
+        window.location.href = '../admin_login/index.html';
+    }
+    </script>
+    <meta charset="UTF-8">
+    <title>System Users Management</title>
+    <link rel="stylesheet" href="js/admin_style.css">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.7.1/firebase-firestore-compat.js"></script>
+
+    <style>
+        /* Table Styles */
+        .table-wrapper { overflow-x: auto; white-space: nowrap; padding-bottom: 20px; } 
+        th, td { padding: 12px 10px; font-size: 11px; vertical-align: middle; border-bottom: 1px solid #f3f4f6; }
+        th { background-color: #f9fafb; font-weight: 600; color: #4b5563; }
+        tr:hover { background-color: #f8fafc; transition: 0.2s; }
+        
+        /* Button Styles */
+        .btn-action { padding: 4px 8px; border-radius: 4px; font-size: 10px; color: white; margin: 0 2px; transition: 0.2s; }
+        .btn-blue { background-color: #00c0ef; } .btn-blue:hover { background-color: #00acd6; }
+        .btn-green { background-color: #00a65a; } .btn-green:hover { background-color: #008d4c; }
+        .btn-orange { background-color: #f39c12; } .btn-orange:hover { background-color: #e08e0b; }
+        .btn-red { background-color: #dd4b39; } .btn-red:hover { background-color: #d73925; }
+
+        /* ✅ CSS สำหรับ Sidebar เฉพาะหน้าระบบ (System Menu Style) */
+        .sys-menu-header {
+            color: #4b646f;
+            background: #1a2226;
+            padding: 10px 25px 10px 15px;
+            font-size: 12px;
+            text-transform: uppercase;
+            font-weight: bold;
+        }
+        .sys-menu-item {
+            display: block;
+            padding: 12px 15px;
+            color: #b8c7ce;
+            border-bottom: 1px solid #222d32;
+            transition: all 0.3s;
+            font-size: 13px;
+            cursor: pointer;
+            text-decoration: none;
+        }
+        .sys-menu-item:hover {
+            background-color: #1e282c;
+            color: #fff;
+        }
+        .sys-menu-item.active {
+            background-color: #1e282c;
+            color: #fff;
+            border-left: 3px solid #00a65a; /* เส้นเขียวด้านซ้าย */
+        }
+        .sys-menu-item i {
+            width: 20px;
+            margin-right: 10px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body class="bg-gray-50 font-sans">
+    <script src="js/admin_ui.js"></script>
+    <script src="js/firebase_setup.js"></script> 
+
+    <script>
+        // 1. เรียก Render UI (ใส่ 'system' เพื่อให้ Header Active)
+        renderAdminUI('system', 'users'); 
+
+        // ✅ 2. เขียนทับ Sidebar ด้านซ้าย ให้เป็นเมนูของ System
+        setTimeout(() => {
+            const sidebarContainer = document.querySelector('aside') || document.getElementById('sidebar-menu'); 
+            
+            if (sidebarContainer) {
+                sidebarContainer.innerHTML = `
+                    <div class="h-full bg-[#222d32] overflow-y-auto custom-scroll pt-2">
+                        
+                        <div class="sys-menu-header">การกำหนดค่าระบบ</div>
+                        
+                        <a href="admin_system.html" class="sys-menu-item">
+                            <i class="fa-solid fa-gears"></i> การกำหนดค่าพารามิเตอร์ระบบ
+                        </a>
+                        <a href="#" class="sys-menu-item">
+                            <i class="fa-solid fa-list"></i> การจัดการเมนูระบบ
+                        </a>
+                        <a href="admin_system.html" class="sys-menu-item">
+                            <i class="fa-solid fa-credit-card"></i> การจัดการวิธีการชำระเงิน
+                        </a>
+                        <a href="#" class="sys-menu-item">
+                            <i class="fa-solid fa-file-lines"></i> การจัดการบันทึกระบบ
+                        </a>
+
+                        <div class="sys-menu-header">การจัดการการเข้าถึง</div>
+                        
+                        <a href="#" class="sys-menu-item">
+                            <i class="fa-solid fa-shield-halved"></i> การควบคุมการเข้าถึง
+                        </a>
+                        
+                        <a href="#" class="sys-menu-item active">
+                            <i class="fa-solid fa-users-gear"></i> การจัดการผู้ใช้ระบบ
+                        </a>
+                    </div>
+                `;
+            }
+        }, 100);
+
+        // 3. สร้างเนื้อหาตรงกลาง (Content)
+        document.getElementById('main-content').innerHTML = `
+            <div class="bg-white p-5 shadow-sm border-b flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold text-gray-800">🛠️ การจัดการผู้ใช้ระบบ (System Admins)</h2>
+                <div class="flex gap-2">
+                    <button onclick="openModal('add')" class="bg-[#00a65a] text-white px-3 py-1.5 rounded text-xs hover:bg-[#008d4c] font-bold shadow transition">
+                        <i class="fa-solid fa-plus mr-1"></i> เพิ่มผู้ใช้
+                    </button>
+                </div>
+            </div>
+
+            <div class="bg-white p-4 rounded-xl shadow-sm border border-gray-100 mb-4 mx-4">
+                <h3 class="text-xs font-bold text-gray-500 mb-3 uppercase tracking-wide flex items-center gap-2">
+                    <i class="fa-solid fa-magnifying-glass text-blue-500"></i> การค้นหาแบบมีเงื่อนไข
+                </h3>
+                <div class="flex flex-wrap gap-3 items-end">
+                    <div class="w-full sm:w-auto">
+                        <label class="block text-[10px] text-gray-400 mb-1">บัญชีผู้ใช้ (Username)</label>
+                        <input type="text" id="filter-user" onkeyup="fetchAdmins()" class="border border-gray-300 rounded px-3 py-1.5 text-xs w-full focus:outline-none focus:border-blue-400" placeholder="ชื่อผู้ใช้...">
+                    </div>
+                    <div class="w-full sm:w-auto">
+                        <label class="block text-[10px] text-gray-400 mb-1">ชื่อ-นามสกุล (Name)</label>
+                        <input type="text" id="filter-name" onkeyup="fetchAdmins()" class="border border-gray-300 rounded px-3 py-1.5 text-xs w-full focus:outline-none focus:border-blue-400" placeholder="ชื่อจริง...">
+                    </div>
+                    <div class="w-full sm:w-auto">
+                        <label class="block text-[10px] text-gray-400 mb-1">สถานะ</label>
+                        <select id="filter-status" onchange="fetchAdmins()" class="border border-gray-300 rounded px-3 py-1.5 text-xs w-full bg-white focus:outline-none focus:border-blue-400 cursor-pointer">
+                            <option value="">-- ทั้งหมด --</option>
+                            <option value="active">กำลังใช้งาน</option>
+                            <option value="banned">ปิดใช้งาน</option>
+                        </select>
+                    </div>
+                    <button onclick="fetchAdmins()" class="bg-gray-100 border border-gray-300 text-gray-600 px-4 py-1.5 rounded text-xs hover:bg-gray-200 font-bold transition shadow-sm">
+                        ค้นหา
+                    </button>
+                </div>
+            </div>
+
+            <div class="bg-white rounded-xl shadow-sm border border-gray-100 mx-4 overflow-hidden">
+                <div class="table-wrapper custom-scroll">
+                    <table class="w-full text-left">
+                        <thead class="bg-gray-50 border-b">
+                            <tr>
+                                <th class="w-10 text-center"><input type="checkbox"></th>
+                                <th>บัญชีผู้ใช้ (Username)</th>
+                                <th>ชื่อ-นามสกุล (Name)</th>
+                                <th>บทบาท (Role)</th>
+                                <th class="text-center">สถานะ</th>
+                                <th>เวลาสร้าง</th>
+                                <th class="text-center w-48">จัดการ</th>
+                            </tr>
+                        </thead>
+                        <tbody id="admin-list-body">
+                            <tr><td colspan="7" class="text-center p-8 text-gray-400">กำลังโหลดข้อมูล...</td></tr>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div id="modal-admin" class="fixed inset-0 bg-black/60 hidden items-center justify-center z-50 backdrop-blur-sm">
+                <div class="bg-white rounded-lg shadow-2xl w-full max-w-md p-6 transform scale-100 transition-transform">
+                    <div class="flex justify-between items-center mb-4 border-b pb-2">
+                        <h3 id="modal-title" class="font-bold text-gray-700">เพิ่มผู้ดูแลระบบ</h3>
+                        <button onclick="closeModal()" class="text-gray-400 hover:text-gray-600"><i class="fa-solid fa-xmark"></i></button>
+                    </div>
+                    
+                    <div class="space-y-3 text-sm">
+                        <input type="hidden" id="admin-doc-id">
+                        
+                        <div>
+                            <label class="block text-gray-600 mb-1 text-xs font-bold">บัญชีผู้ใช้ (Username) <span class="text-red-500">*</span></label>
+                            <input type="text" id="inp-username" class="w-full border border-gray-300 rounded px-3 py-2 focus:border-blue-500 outline-none">
+                        </div>
+                        
+                        <div>
+                            <label class="block text-gray-600 mb-1 text-xs font-bold">ชื่อ-นามสกุล (Name)</label>
+                            <input type="text" id="inp-name" class="w-full border border-gray-300 rounded px-3 py-2 focus:border-blue-500 outline-none" placeholder="เช่น: Super Admin">
+                        </div>
+
+                        <div>
+                            <label class="block text-gray-600 mb-1 text-xs font-bold">รหัสผ่าน (Password)</label>
+                            <input type="text" id="inp-password" class="w-full border border-gray-300 rounded px-3 py-2 focus:border-blue-500 outline-none" placeholder="กำหนดรหัสผ่าน">
+                        </div>
+
+                        <div>
+                            <label class="block text-gray-600 mb-1 text-xs font-bold">บทบาท (Role)</label>
+                            <select id="inp-role" class="w-full border border-gray-300 rounded px-3 py-2 bg-white focus:border-blue-500 outline-none">
+                                <option value="admin">ผู้ดูแลทั่วไป (Admin)</option>
+                                <option value="owner">เจ้าของระบบ (Owner)</option>
+                                <option value="support">ฝ่ายซัพพอร์ต (Support)</option>
+                            </select>
+                        </div>
+
+                        <div>
+                            <label class="block text-gray-600 mb-1 text-xs font-bold">สถานะ</label>
+                            <select id="inp-status" class="w-full border border-gray-300 rounded px-3 py-2 bg-white focus:border-blue-500 outline-none">
+                                <option value="active">กำลังใช้งาน (Active)</option>
+                                <option value="banned">ปิดใช้งาน (Inactive)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="flex justify-end gap-2 mt-6 pt-4 border-t">
+                        <button onclick="saveAdmin()" class="bg-[#00a65a] hover:bg-[#008d4c] text-white px-4 py-2 rounded text-xs font-bold shadow">บันทึกข้อมูล</button>
+                        <button onclick="closeModal()" class="bg-gray-300 hover:bg-gray-400 text-gray-700 px-4 py-2 rounded text-xs font-bold shadow">ยกเลิก</button>
+                    </div>
+                </div>
+            </div>
+        `;
+
+        // --- Logic Scripts ---
+        
+        let allAdmins = []; // เก็บข้อมูลเพื่อกรอง
+
+        // 1. Fetch Data
+        async function fetchAdmins() {
+            if (!window.db) return setTimeout(fetchAdmins, 1000);
+
+            const tbody = document.getElementById('admin-list-body');
+            
+            // ดึงข้อมูลครั้งแรก หรือใช้ onSnapshot เพื่อ Realtime
+            db.collection("admins").orderBy("created_at", "desc").onSnapshot((snap) => {
+                allAdmins = [];
+                snap.forEach(doc => {
+                    allAdmins.push({ id: doc.id, ...doc.data() });
+                });
+                renderTable(); // เรียกฟังก์ชันวาดตาราง
+            });
+        }
+
+        // ฟังก์ชันวาดตาราง (แยกออกมาเพื่อให้ค้นหาแบบ Realtime ได้)
+        function renderTable() {
+            const tbody = document.getElementById('admin-list-body');
+            const filterUser = document.getElementById('filter-user').value.toLowerCase();
+            const filterName = document.getElementById('filter-name').value.toLowerCase();
+            const filterStatus = document.getElementById('filter-status').value;
+
+            let html = '';
+            let hasData = false;
+
+            allAdmins.forEach(d => {
+                // Default Values
+                const status = d.status || 'active'; 
+                const name = d.name || '-';
+                const role = d.role || 'admin';
+                const username = d.username || '';
+
+                // 🔍 Filter Logic
+                if (filterUser && !username.toLowerCase().includes(filterUser)) return;
+                if (filterName && !name.toLowerCase().includes(filterName)) return;
+                if (filterStatus && status !== filterStatus) return;
+
+                hasData = true;
+
+                const statusBadge = status === 'active' 
+                    ? '<span class="bg-green-100 text-green-700 px-2 py-0.5 rounded text-[10px] font-bold">กำลังใช้งาน</span>' 
+                    : '<span class="bg-red-100 text-red-700 px-2 py-0.5 rounded text-[10px] font-bold">ปิดใช้งาน</span>';
+
+                const dateStr = d.created_at ? new Date(d.created_at).toLocaleString('th-TH') : '-';
+                
+                // Prepare Data for Edit
+                const dataStr = JSON.stringify({
+                    id: d.id, 
+                    username: username,
+                    name: name,
+                    role: role,
+                    status: status,
+                    password: d.password 
+                }).replace(/"/g, '&quot;');
+
+                html += `
+                    <tr class="border-b hover:bg-gray-50">
+                        <td class="text-center"><input type="checkbox"></td>
+                        <td class="font-bold text-gray-700">${username}</td>
+                        <td class="text-gray-600">${name}</td>
+                        <td><span class="bg-blue-50 text-blue-600 px-2 py-0.5 rounded text-[10px] font-bold border border-blue-100 uppercase">${role}</span></td>
+                        <td class="text-center">${statusBadge}</td>
+                        <td class="text-gray-500 text-[10px]">${dateStr}</td>
+                        <td class="text-center">
+                            <div class="flex justify-center gap-1">
+                                <button onclick="openModal('edit', ${dataStr})" class="btn-action btn-green">แก้ไข</button>
+                                <button onclick="deleteAdmin('${d.id}')" class="btn-action btn-red">ลบ</button>
+                            </div>
+                        </td>
+                    </tr>
+                `;
+            });
+
+            if (!hasData) {
+                tbody.innerHTML = '<tr><td colspan="7" class="text-center p-8 text-gray-400">ไม่พบข้อมูลตามเงื่อนไข</td></tr>';
+            } else {
+                tbody.innerHTML = html;
+            }
+        }
+
+        // 2. Modal Functions
+        window.openModal = (mode, data = null) => {
+            const modal = document.getElementById('modal-admin');
+            const title = document.getElementById('modal-title');
+            
+            // เคลียร์ค่า
+            document.getElementById('admin-doc-id').value = '';
+            document.getElementById('inp-username').value = '';
+            document.getElementById('inp-name').value = ''; 
+            document.getElementById('inp-password').value = '';
+            document.getElementById('inp-role').value = 'admin'; 
+            document.getElementById('inp-status').value = 'active';
+
+            if (mode === 'add') {
+                title.innerText = 'เพิ่มผู้ดูแลระบบ';
+                document.getElementById('inp-username').disabled = false;
+            } else {
+                title.innerText = 'แก้ไขผู้ดูแลระบบ';
+                document.getElementById('admin-doc-id').value = data.id;
+                document.getElementById('inp-username').value = data.username;
+                document.getElementById('inp-username').disabled = true; 
+                
+                document.getElementById('inp-name').value = data.name;
+                document.getElementById('inp-password').value = data.password; 
+                document.getElementById('inp-role').value = data.role;
+                document.getElementById('inp-status').value = data.status;
+            }
+            modal.classList.remove('hidden');
+            modal.classList.add('flex');
+        }
+
+        window.closeModal = () => {
+            const modal = document.getElementById('modal-admin');
+            modal.classList.add('hidden');
+            modal.classList.remove('flex');
+        }
+
+        // 3. Save Data
+        window.saveAdmin = async () => {
+            const docId = document.getElementById('admin-doc-id').value;
+            const username = document.getElementById('inp-username').value.trim();
+            const name = document.getElementById('inp-name').value.trim(); 
+            const password = document.getElementById('inp-password').value.trim();
+            const role = document.getElementById('inp-role').value; 
+            const status = document.getElementById('inp-status').value;
+
+            if(!username) return alert("กรุณากรอก Username");
+            if(!password) return alert("กรุณากำหนดรหัสผ่าน");
+
+            const dataObj = { 
+                username: username,
+                name: name,
+                password: password,
+                role: role,
+                status: status
+            };
+
+            try {
+                if (docId) {
+                    await db.collection("admins").doc(docId).update(dataObj);
+                } else {
+                    const check = await db.collection("admins").where("username", "==", username).get();
+                    if(!check.empty) return alert("Username นี้มีอยู่แล้ว");
+
+                    dataObj.created_at = new Date().toISOString();
+                    await db.collection("admins").add(dataObj);
+                }
+                closeModal();
+                alert("บันทึกข้อมูลเรียบร้อย");
+            } catch(e) { alert("Error: " + e.message); }
+        }
+
+        // 4. Helper Actions
+        window.deleteAdmin = async (docId) => {
+            if(confirm("ยืนยันการลบผู้ดูแลระบบนี้?")) {
+                await db.collection("admins").doc(docId).delete();
+            }
+        }
+
+        // เริ่มโหลดข้อมูล
+        fetchAdmins();
+
+    </script>
+</body>
+</html>
